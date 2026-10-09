@@ -1,0 +1,15 @@
+# Runtime data (config, state, logs, sessions)
+data/
+
+# OpenWA gateway (installer clone karta hai)
+openwa/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS / editors
+.DS_Store
+Thumbs.db
+*.swp

@@ -1,0 +1,13 @@
+{
+  "telegram_bot_token": "123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "telegram_chat_id": "123456789",
+  "openwa_port": 2785,
+  "openwa_api_key": "",
+  "openwa_session_name": "business-bot",
+  "openwa_engine": "whatsapp-web.js",
+  "poll_interval": 5,
+  "cooldown_seconds": 300,
+  "rate_limit_per_minute": 20,
+  "allow_group_automation": false,
+  "broadcast_delay_seconds": 1.5
+}
