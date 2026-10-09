@@ -1,10 +1,10 @@
 # 🤖 WhatsApp Business Automation + Telegram Admin Panel
 
-**Pure Python** business automation system — WhatsApp pe message aaye to auto-reply,
+**Pure Python** business automation — WhatsApp pe message aaye to auto-reply,
 aur **poora control Telegram bot se** (admin panel ki tarah).
 
-WhatsApp ke liye [OpenWA](https://github.com/rmyndharis/OpenWA) open-source gateway use hota hai
-(local service ki tarah chalta hai, Python usse REST API se baat karta hai).
+WhatsApp ke liye [OpenWA](https://github.com/rmyndharis/OpenWA) open-source gateway
+use hota hai — whatsapp-web.js engine + real Chromium browser se connect hota hai.
 
 ---
 
@@ -12,16 +12,17 @@ WhatsApp ke liye [OpenWA](https://github.com/rmyndharis/OpenWA) open-source gate
 
 | Feature | Detail |
 |---|---|
-| 🔌 **QR Connect** | Telegram pe `/connect` → QR Telegram pe bheja jata hai → WhatsApp scan karein |
-| 🔑 **Pairing Code** | `/pair <number>` → 8-char code → WhatsApp mein enter karein (QR alternative) |
+| 🔌 **QR Connect** | `/connect` → QR Telegram pe bheja jata hai → WhatsApp scan karein |
+| 🔑 **Pairing Code** | `/pair <number>` → 8-char code → WhatsApp mein enter karein |
 | 💬 **Auto-reply Automation** | Trigger → Reply rules. Message aaye to automatic reply |
-| 🛡️ **Anti-spam (accident-proof)** | First-match-only reply, per-contact cooldown, first-time-only mode, rate limit |
-| 📢 **Broadcast `/all`** | Sabko 1-time message (Good Morning etc.) — **confirmation ke saath** |
+| 🛡️ **Anti-spam** | First-match-only, per-contact cooldown, first-time-only mode, rate limit |
+| 📢 **Broadcast `/all`** | Sabko 1-time message — **confirmation ke saath** |
 | 🎯 **Specific number `/send`** | Telegram se kisi bhi number pe direct message |
 | 🚫 **Blacklist** | `/blacklist_add` / `/blacklist_remove` — unko koi message nahi jayega |
 | 📋 **Automation Admin** | `/automation_add` / `edit` / `remove` / `toggle` — sab Telegram se |
 | ⌨️ **Command Menu** | Bot mein `/` likhte hi saare commands load ho jate hain |
 | 🔔 **Connected Alerts** | Bot connect → "✅ Bot connected", WhatsApp connect → "✅ WhatsApp Connected" |
+| ⚡ **Lightning Fast** | Optimized Chromium — unnecessary features disabled, fast headless mode |
 | 🖥️ **Cross-platform** | Windows · macOS · Linux · Termux — sab pe chalta hai |
 | 📦 **One-line install** | Single command se kisi bhi device pe install |
 
@@ -38,8 +39,9 @@ Installer yeh sab karta hai:
 2. Repository clone
 3. Python dependencies (`python-telegram-bot`, `requests`)
 4. OpenWA clone + build (WhatsApp gateway)
-5. OpenWA first boot → API key auto-generate
-6. **Configuration screen** — Telegram Bot Token, Chat ID, engine, safety settings
+5. **Browser setup** — Termux pe Chromium install, desktop pe Chrome download
+6. OpenWA first boot → API key auto-generate
+7. **Configuration screen** — Telegram Bot Token, Chat ID, engine, safety settings
 
 ### Windows pe
 1. Install karein: [Git Bash](https://git-scm.com/download/win), [Python 3.10+](https://www.python.org/downloads/), [Node.js 22+](https://nodejs.org/)
@@ -51,10 +53,10 @@ pkg install -y git curl python nodejs
 curl -sSL https://raw.githubusercontent.com/ykewat354-cyber/whatsapp-telegram-automation/main/install.sh | bash
 ```
 
-> **Termux note:** Termux pe **whatsapp-web.js + Chromium** use karein (baileys WhatsApp
-> server se reject hota hai — "Connection Terminated" error). Installer automatically
-> Chromium install karta hai aur `PUPPETEER_EXECUTABLE_PATH` set karta hai.
-> Engine mein **1 (whatsapp-web.js)** choose karein.
+> **Note:** Installer automatically detect karta hai ki aap Termux pe hain ya desktop pe.
+> Termux pe Chromium install hota hai, desktop pe puppeteer ka Chrome download hota hai.
+> Engine mein **whatsapp-web.js** choose karein — real browser connection WhatsApp ko
+> reject nahi karta (baileys reject hota hai).
 
 ---
 
@@ -69,7 +71,7 @@ python3 run.py
 2. Telegram bot pe **`/connect`** bhejein (ya **`/pair <number>`** se pairing code login)
 3. **QR code** Telegram pe milega → WhatsApp → Settings → Linked Devices → scan karein
    - **Pairing code method:** `/pair 919876543210` → code milega → WhatsApp mein enter karein
-4. Connect hote hi **"✅ WhatsApp Connected"** alert + auto-reply shuru!
+4. Connect hote hi **"✅ WhatsApp Connected!"** alert + auto-reply shuru!
 
 ---
 
@@ -79,8 +81,8 @@ python3 run.py
 | Command | Kaam |
 |---|---|
 | `/connect` | QR generate karke WhatsApp connect karein |
-| `/pair <number>` | Phone number se pairing code login (QR alternative) |
-| `status` | Poori connection status |
+| `/pair <number>` | Phone number se pairing code login |
+| `/status` | Poori connection status |
 
 ### Messaging
 | Command | Kaam |
@@ -113,7 +115,6 @@ python3 run.py
 ```
 /automation_add price => Humara product best price pe hai. Details ke liye call karein.
 ```
-> Customer: *"price kya hai?"* → Bot auto-reply: *"Humara product best price pe hai..."*
 
 **Match types** (trigger ke pehle lagayein):
 | Prefix | Matlab | Example |
@@ -123,21 +124,9 @@ python3 run.py
 | `starts:` | message shuru ho | `starts:hi` → "hi..." se shuru |
 | `regex:` | regular expression | `regex:price\|c` → price ya cost |
 
-**Anti-spam (default ON):**
-- Har rule **sirf us contact ke pehle message pe** fire hota hai (first-time-only)
-- Baar-baar messages pe reply **nahi** — cooldown (default 300s) + first-match-only
-- Har message pe **sirf ek** reply (double reply kabhi nahi)
-- Rate limit: default 20 messages/minute
-- Group messages pe auto-reply **nahi** (default)
-
-**First-time-only hata ke har message pe reply chahiye:**
-```
-/automation_first a1
-```
-
 ---
 
-## 🛡️ Safety Features (accident se bachav)
+## 🛡️ Safety Features
 
 1. **First-match-only** — ek incoming message pe sirf ek auto-reply
 2. **First-time-only mode** (default) — rule sirf pehle message pe fire
@@ -164,11 +153,11 @@ python3 run.py
   "openwa_api_key": "...",
   "openwa_session_name": "business-bot",
   "openwa_engine": "whatsapp-web.js",
-  "poll_interval": 5,
+  "poll_interval": 30,
   "cooldown_seconds": 300,
   "rate_limit_per_minute": 20,
   "allow_group_automation": false,
-  "broadcast_delay_seconds": 1.5
+  "broadcast_delay_seconds": 1.0
 }
 ```
 
@@ -183,9 +172,9 @@ whatsapp-telegram-automation/
 ├── install.sh                  # One-line installer
 ├── run.py                      # Entry point
 ├── requirements.txt
-├── openwa.env.template         # OpenWA env template
+├── openwa.env.template         # OpenWA env template (Chromium optimized)
 ├── src/
-│   ├── main.py                 # Bootstrap (services jodta hai)
+│   ├── main.py                 # Bootstrap
 │   ├── config.py               # Config + setup screen
 │   ├── storage.py              # JSON storage (thread-safe)
 │   ├── openwa_client.py        # OpenWA REST client + service manager
@@ -205,16 +194,12 @@ whatsapp-telegram-automation/
 | QR nahi mil raha | `/connect` dobara chalayein; `data/openwa.log` check karein |
 | QR expire ho gaya | `/connect` dobara — naya QR milega |
 | OpenWA start nahi ho raha | `data/openwa.log` dekhein; Node 22+ installed hai? |
-| Termux pe engine issue | Engine mein **whatsapp-web.js** choose karein (Chromium ke saath) |
-| API key nahi mila | `openwa/data/.api-key` file check karein, ya `python3 run.py --setup` |
+| "Conflict" error | Purana bot instance chal raha hai — `pkill -f "python3 run.py"` |
+| Send timeout | Normal hai — Chromium pe send slow hota hai (120s timeout set hai) |
 | Commands nahi dikhe `/` mein | Bot restart karein — `setMyCommands` startup pe hota hai |
 | Auto-reply nahi aa raha | `/status` se WhatsApp `ready` hai? `/automation_list` se rule enabled hai? |
 
-### Linux pe Chrome dependencies (whatsapp-web.js engine)
-
-Agar aap Linux server pe chalate hain aur whatsapp-web.js engine use karte hain, to Chrome ko
-kuch system libraries chahiye hote hain. Agar ye missing hon to OpenWA start hone ke baad
-QR nahi milega ya error aayega. Debian/Ubuntu pe:
+### Linux pe Chrome dependencies
 
 ```bash
 sudo apt-get install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
@@ -222,12 +207,7 @@ sudo apt-get install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 
   libpango-1.0-0 libcairo2
 ```
 
-Termux pe Chromium pre-installed milta hai (`pkg install chromium`), aur whatsapp-web.js engine
-isi use karta hai — real browser connection WhatsApp ko reject nahi karta (baileys reject hota hai).
-
 ### Docker (alternative deploy)
-
-Agar aap Docker use karna chahte hain, to OpenWA khud Docker-native hai:
 
 ```bash
 cd ~/whatsapp-telegram-automation/openwa
@@ -235,14 +215,11 @@ docker compose up -d
 # API key: docker exec openwa-api cat /data/.api-key
 ```
 
-Docker mein Puppeteer Chrome pehle se configured hai, isliye whatsapp-web.js engine
-bina kisi extra setup ke kaam karega.
-
 ---
 
 ## ⚠️ Disclaimer
 
-Yeh system unofficial WhatsApp clients (whatsapp-web.js / baileys) use karta hai.
+Yeh system unofficial WhatsApp client (whatsapp-web.js) use karta hai.
 WhatsApp ke hisaab se **automation pe account restrict/ban ka risk hamesha hota hai**.
 
 - Hamesha ek **dedicated number** use karein (personal number nahi)

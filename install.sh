@@ -1,7 +1,7 @@
 #!/bin/sh
 # ============================================================
 #  WhatsApp Telegram Automation — One-line Installer
-#  Linux / macOS / Termux / Windows (Git Bash) supported
+#  Windows / macOS / Linux / Termux supported
 #
 #  One-line install:
 #  curl -sSL https://raw.githubusercontent.com/ykewat354-cyber/whatsapp-telegram-automation/main/install.sh | bash
@@ -139,9 +139,8 @@ fi
 log "Step 5/6: OpenWA first boot — API key generate ho raha hai..."
 cd "$INSTALL_DIR"
 mkdir -p data
-cp openwa.env.template openwa/.env
-sed -i.bak "s/__PORT__/2785/; s/__ENGINE__/whatsapp-web.js/" openwa/.env
-rm -f openwa/.env.bak
+# Env template se .env banao (port + engine + chromium path)
+sed "s/__PORT__/2785/; s/__ENGINE__/whatsapp-web.js/; s|__CHROMIUM_PATH__|$(command -v chromium-browser 2>/dev/null || command -v chromium 2>/dev/null || echo '')|" openwa.env.template > openwa/.env
 cd "$INSTALL_DIR/openwa"
 PORT=2785 node dist/main > "$INSTALL_DIR/data/openwa-firstboot.log" 2>&1 &
 OPENWA_PID=$!
@@ -172,4 +171,5 @@ log "    cd $INSTALL_DIR"
 log "    $PYTHON run.py"
 log ""
 log "  Phir Telegram bot pe /connect bhejein — QR milega!"
+log "  (ya /pair <number> se pairing code login)"
 log "==============================================="

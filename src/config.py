@@ -16,12 +16,12 @@ DEFAULT_CONFIG = {
     "openwa_port": 2785,
     "openwa_api_key": "",
     "openwa_session_name": "business-bot",
-    "openwa_engine": "whatsapp-web.js",  # ya "baileys"
+    "openwa_engine": "whatsapp-web.js",  # real browser — sab platforms pe stable
     "poll_interval": 30,
     "cooldown_seconds": 300,
     "rate_limit_per_minute": 20,
     "allow_group_automation": False,
-    "broadcast_delay_seconds": 1.5,
+    "broadcast_delay_seconds": 1.0,
 }
 
 ENV_TEMPLATE = os.path.join(utils.PROJECT_ROOT, "openwa.env.template")
