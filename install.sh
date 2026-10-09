@@ -28,12 +28,24 @@ esac
 log "WhatsApp Telegram Automation — Installer"
 log "Platform: $(uname -s) | Termux: $IS_TERMUX | Windows: $IS_WINDOWS"
 
+# ---------------- Python command detect ----------------
+# Windows pe 'python3' nahi hota (sirf 'python'), baaki jagah 'python3'
+PYTHON="python3"
+command -v python3 >/dev/null 2>&1 || PYTHON="python"
+log "Python command: $PYTHON ($($PYTHON --version 2>&1))"
+
 # ---------------- package helpers ----------------
 install_pkgs() {
   if [ "$IS_TERMUX" = 1 ]; then
     pkg install -y "$@"
   elif [ "$IS_MAC" = 1 ]; then
-    brew install "$@"
+    # Homebrew mein 'python3' formula nahi hai — 'python' hai
+    ARGS=""
+    for pkg in "$@"; do
+      [ "$pkg" = "python3" ] && pkg="python"
+      ARGS="$ARGS $pkg"
+    done
+    brew install $ARGS
   elif [ "$IS_LINUX" = 1 ]; then
     sudo apt-get update -y && sudo apt-get install -y "$@"
   else
@@ -48,11 +60,11 @@ log "Step 1/6: System dependencies check..."
 MISSING=""
 command -v git      >/dev/null 2>&1 || MISSING="$MISSING git"
 command -v curl     >/dev/null 2>&1 || MISSING="$MISSING curl"
-command -v python3  >/dev/null 2>&1 || MISSING="$MISSING python3"
+command -v "$PYTHON" >/dev/null 2>&1 || MISSING="$MISSING python3"
 command -v node     >/dev/null 2>&1 || MISSING="$MISSING nodejs"
 if [ -n "$MISSING" ]; then
   if [ "$IS_WINDOWS" = 1 ]; then
-    err "Windows pe Yeh tools manually install karein: $MISSING"
+    err "Windows pe yeh tools manually install karein: $MISSING"
     err "  - Git Bash: https://git-scm.com/download/win"
     err "  - Python 3.10+: https://www.python.org/downloads/"
     err "  - Node.js 22+: https://nodejs.org/"
@@ -74,7 +86,7 @@ if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 22 ]; then
   if [ "$IS_TERMUX" = 1 ]; then
     pkg install -y nodejs
   elif [ "$IS_MAC" = 1 ]; then
-    brew install node@22 || brew install node
+    brew install node
   elif [ "$IS_LINUX" = 1 ]; then
     curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
     sudo apt-get install -y nodejs
@@ -93,9 +105,9 @@ cd "$INSTALL_DIR"
 
 # ---------------- Step 3: Python dependencies ----------------
 log "Step 3/6: Python dependencies install..."
-python3 -m pip install -r requirements.txt >/dev/null 2>&1 \
-  || python3 -m pip install --break-system-packages -r requirements.txt \
-  || python3 -m pip install --user -r requirements.txt
+"$PYTHON" -m pip install -r requirements.txt >/dev/null 2>&1 \
+  || "$PYTHON" -m pip install --break-system-packages -r requirements.txt \
+  || "$PYTHON" -m pip install --user -r requirements.txt
 
 # ---------------- Step 4: OpenWA gateway ----------------
 log "Step 4/6: OpenWA (WhatsApp Gateway) setup..."
@@ -132,6 +144,7 @@ PORT=2785 node dist/main > "$INSTALL_DIR/data/openwa-firstboot.log" 2>&1 &
 OPENWA_PID=$!
 for i in $(seq 1 60); do
   [ -f "$INSTALL_DIR/openwa/data/.api-key" ] && break
+  kill -0 "$OPENWA_PID" 2>/dev/null || break
   sleep 2
 done
 kill "$OPENWA_PID" 2>/dev/null || true
@@ -145,7 +158,7 @@ fi
 # ---------------- Step 6: configuration screen ----------------
 log "Step 6/6: Configuration screen..."
 cd "$INSTALL_DIR"
-python3 run.py --setup
+"$PYTHON" run.py --setup
 
 log ""
 log "==============================================="
@@ -153,7 +166,7 @@ log "  Installation complete!"
 log ""
 log "  Start karne ke liye:"
 log "    cd $INSTALL_DIR"
-log "    python3 run.py"
+log "    $PYTHON run.py"
 log ""
 log "  Phir Telegram bot pe /connect bhejein — QR milega!"
 log "==============================================="

@@ -206,6 +206,33 @@ whatsapp-telegram-automation/
 | Commands nahi dikhe `/` mein | Bot restart karein — `setMyCommands` startup pe hota hai |
 | Auto-reply nahi aa raha | `/status` se WhatsApp `ready` hai? `/automation_list` se rule enabled hai? |
 
+### Linux pe Chrome dependencies (whatsapp-web.js engine)
+
+Agar aap Linux server pe chalate hain aur whatsapp-web.js engine use karte hain, to Chrome ko
+kuch system libraries chahiye hote hain. Agar ye missing hon to OpenWA start hone ke baad
+QR nahi milega ya error aayega. Debian/Ubuntu pe:
+
+```bash
+sudo apt-get install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+  libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 \
+  libpango-1.0-0 libcairo2
+```
+
+Termux pe yeh zaroori nahi — baileys engine bina Chrome ke chalta hai.
+
+### Docker (alternative deploy)
+
+Agar aap Docker use karna chahte hain, to OpenWA khud Docker-native hai:
+
+```bash
+cd ~/whatsapp-telegram-automation/openwa
+docker compose up -d
+# API key: docker exec openwa-api cat /data/.api-key
+```
+
+Docker mein Puppeteer Chrome pehle se configured hai, isliye whatsapp-web.js engine
+bina kisi extra setup ke kaam karega.
+
 ---
 
 ## ⚠️ Disclaimer
