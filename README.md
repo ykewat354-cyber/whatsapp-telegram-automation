@@ -50,8 +50,9 @@ pkg install -y git curl python nodejs
 curl -sSL https://raw.githubusercontent.com/ykewat354-cyber/whatsapp-telegram-automation/main/install.sh | bash
 ```
 
-> **Termux tip:** Agar puppeteer/Chrome fail ho, to config screen mein **baileys** engine choose karein
-> (lightweight, ~80MB RAM, Chrome ki zaroorat nahi).
+> **Termux note:** Installer Termux pe automatically Chrome download skip karta hai
+> (puppeteer Android support nahi karta). Config screen mein **baileys (option 2)**
+> choose karein — lightweight hai (~80MB RAM) aur bina Chrome ke chalta hai.
 
 ---
 

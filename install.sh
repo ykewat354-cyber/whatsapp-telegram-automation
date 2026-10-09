@@ -105,7 +105,15 @@ fi
 cd "$INSTALL_DIR/openwa"
 if [ ! -d node_modules ]; then
   log "OpenWA dependencies install ho rahi hain (2-5 minute lag sakte hain)..."
-  npm ci
+  if [ "$IS_TERMUX" = 1 ]; then
+    # Termux/Android pe puppeteer ka Chrome download support nahi karta.
+    # Chrome skip karte hain — config screen mein baileys engine choose hoga
+    # (baileys lightweight hai aur bina Chrome ke chalta hai).
+    log "Termux detected — Chrome download skip ho raha hai (baileys engine use hoga)"
+    PUPPETEER_SKIP_DOWNLOAD=true npm ci
+  else
+    npm ci
+  fi
 fi
 if [ ! -f dist/main.js ]; then
   log "OpenWA build ho raha hai..."

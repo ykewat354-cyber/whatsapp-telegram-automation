@@ -179,6 +179,21 @@ class EngineTestCase(unittest.TestCase):
         self.assertIsNone(TelegramAdminBot._parse_rule("no separator"))
         self.assertIsNone(TelegramAdminBot._parse_rule("=> empty trigger"))
 
+    def test_is_termux_detection(self):
+        from src.config import is_termux
+
+        old_prefix = os.environ.get("PREFIX", "")
+        try:
+            os.environ["PREFIX"] = "/data/data/com.termux/files/usr"
+            self.assertTrue(is_termux())
+            os.environ["PREFIX"] = "/usr/local"
+            self.assertFalse(is_termux())
+        finally:
+            if old_prefix:
+                os.environ["PREFIX"] = old_prefix
+            else:
+                os.environ.pop("PREFIX", None)
+
 
 if __name__ == "__main__":
     unittest.main()

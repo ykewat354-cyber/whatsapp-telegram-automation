@@ -62,6 +62,11 @@ def is_configured(cfg: dict) -> bool:
     return bool(cfg.get("telegram_bot_token") and cfg.get("telegram_chat_id"))
 
 
+def is_termux() -> bool:
+    """Termux environment detect karo."""
+    return "com.termux" in os.environ.get("PREFIX", "")
+
+
 def detect_openwa_api_key() -> "str | None":
     """OpenWA first boot ke baad yahan admin API key save hoti hai."""
     path = os.path.join(utils.OPENWA_DIR, "data", ".api-key")
@@ -134,6 +139,9 @@ def _input(prompt: str, default: str = "") -> str:
 
 def run_setup_screen() -> dict:
     print(BANNER)
+    if is_termux():
+        print("⚠️  Termux detected! Engine ke liye baileys (option 2) choose karein —")
+        print("    whatsapp-web.js ko Chrome chahiye hota hai jo Termux pe nahi chalta.\n")
     cfg = load_config()
 
     print("=== Telegram Bot Setup ===")
@@ -172,9 +180,14 @@ def run_setup_screen() -> dict:
     )
 
     print("\n=== WhatsApp Engine ===")
-    print("  1) whatsapp-web.js  — recommended, low ban risk (Chrome ~500MB RAM)")
-    print("  2) baileys          — lightweight (~80MB RAM), Termux/low-RAM friendly")
-    eng = _input("Engine (1/2)", "1")
+    if is_termux():
+        print("  1) whatsapp-web.js  — needs Chrome (Termux pe kaam NAHI karega)")
+        print("  2) baileys          — recommended for Termux (lightweight, no Chrome)")
+        eng = _input("Engine (1/2)", "2")
+    else:
+        print("  1) whatsapp-web.js  — recommended, low ban risk (Chrome ~500MB RAM)")
+        print("  2) baileys          — lightweight (~80MB RAM), low-RAM devices ke liye")
+        eng = _input("Engine (1/2)", "1")
     cfg["openwa_engine"] = "baileys" if eng == "2" else "whatsapp-web.js"
 
     print("\n=== Safety Settings ===")
