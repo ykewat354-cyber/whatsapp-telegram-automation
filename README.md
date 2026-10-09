@@ -51,9 +51,10 @@ pkg install -y git curl python nodejs
 curl -sSL https://raw.githubusercontent.com/ykewat354-cyber/whatsapp-telegram-automation/main/install.sh | bash
 ```
 
-> **Termux note:** Installer Termux pe automatically Chrome download skip karta hai
-> (puppeteer Android support nahi karta). Config screen mein **baileys (option 2)**
-> choose karein — lightweight hai (~80MB RAM) aur bina Chrome ke chalta hai.
+> **Termux note:** Termux pe **whatsapp-web.js + Chromium** use karein (baileys WhatsApp
+> server se reject hota hai — "Connection Terminated" error). Installer automatically
+> Chromium install karta hai aur `PUPPETEER_EXECUTABLE_PATH` set karta hai.
+> Engine mein **1 (whatsapp-web.js)** choose karein.
 
 ---
 
@@ -204,7 +205,7 @@ whatsapp-telegram-automation/
 | QR nahi mil raha | `/connect` dobara chalayein; `data/openwa.log` check karein |
 | QR expire ho gaya | `/connect` dobara — naya QR milega |
 | OpenWA start nahi ho raha | `data/openwa.log` dekhein; Node 22+ installed hai? |
-| Termux pe Chrome fail | Config screen mein **baileys** engine choose karein |
+| Termux pe engine issue | Engine mein **whatsapp-web.js** choose karein (Chromium ke saath) |
 | API key nahi mila | `openwa/data/.api-key` file check karein, ya `python3 run.py --setup` |
 | Commands nahi dikhe `/` mein | Bot restart karein — `setMyCommands` startup pe hota hai |
 | Auto-reply nahi aa raha | `/status` se WhatsApp `ready` hai? `/automation_list` se rule enabled hai? |
@@ -221,7 +222,8 @@ sudo apt-get install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 
   libpango-1.0-0 libcairo2
 ```
 
-Termux pe yeh zaroori nahi — baileys engine bina Chrome ke chalta hai.
+Termux pe Chromium pre-installed milta hai (`pkg install chromium`), aur whatsapp-web.js engine
+isi use karta hai — real browser connection WhatsApp ko reject nahi karta (baileys reject hota hai).
 
 ### Docker (alternative deploy)
 

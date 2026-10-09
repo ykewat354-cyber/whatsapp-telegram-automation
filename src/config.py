@@ -67,6 +67,20 @@ def is_termux() -> bool:
     return "com.termux" in os.environ.get("PREFIX", "")
 
 
+def detect_chromium_path() -> "str | None":
+    """Termux pe installed Chromium ka path dhundo."""
+    candidates = [
+        "/data/data/com.termux/files/usr/bin/chromium-browser",
+        "/data/data/com.termux/files/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/chromium",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
+
+
 def detect_openwa_api_key() -> "str | None":
     """OpenWA first boot ke baad yahan admin API key save hoti hai."""
     path = os.path.join(utils.OPENWA_DIR, "data", ".api-key")
@@ -93,7 +107,7 @@ def detect_chat_id(token: str) -> "str | None":
 
 
 def write_openwa_env(cfg: dict) -> None:
-    """openwa/.env ko hamare config (port + engine) ke sync mein rakho."""
+    """openwa/.env ko hamare config (port + engine + chromium) ke sync mein rakho."""
     if not os.path.exists(ENV_TEMPLATE):
         return
     with open(ENV_TEMPLATE, encoding="utf-8") as f:
@@ -102,6 +116,9 @@ def write_openwa_env(cfg: dict) -> None:
     content = content.replace(
         "__ENGINE__", cfg.get("openwa_engine", "whatsapp-web.js")
     )
+    # Chromium path — Termux pe installed Chromium use karo
+    chromium_path = detect_chromium_path() or ""
+    content = content.replace("__CHROMIUM_PATH__", chromium_path)
     env_path = os.path.join(utils.OPENWA_DIR, ".env")
     if os.path.exists(env_path):
         with open(env_path, encoding="utf-8") as f:
@@ -181,9 +198,17 @@ def run_setup_screen() -> dict:
 
     print("\n=== WhatsApp Engine ===")
     if is_termux():
-        print("  1) whatsapp-web.js  — needs Chrome (Termux pe kaam NAHI karega)")
-        print("  2) baileys          — recommended for Termux (lightweight, no Chrome)")
-        eng = _input("Engine (1/2)", "2")
+        chromium = detect_chromium_path()
+        if chromium:
+            print(f"  ✅ Chromium mila: {chromium}")
+            print("  1) whatsapp-web.js  — recommended (real browser, stable)")
+            print("  2) baileys          — lightweight (Termux pe reject ho sakta hai)")
+            eng = _input("Engine (1/2)", "1")
+        else:
+            print("  ⚠️  Chromium nahi mila. Pehle install karein: pkg install chromium")
+            print("  1) whatsapp-web.js  — needs Chromium")
+            print("  2) baileys          — no browser needed")
+            eng = _input("Engine (1/2)", "2")
     else:
         print("  1) whatsapp-web.js  — recommended, low ban risk (Chrome ~500MB RAM)")
         print("  2) baileys          — lightweight (~80MB RAM), low-RAM devices ke liye")

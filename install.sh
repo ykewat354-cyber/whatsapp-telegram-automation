@@ -118,10 +118,13 @@ cd "$INSTALL_DIR/openwa"
 if [ ! -d node_modules ]; then
   log "OpenWA dependencies install ho rahi hain (2-5 minute lag sakte hain)..."
   if [ "$IS_TERMUX" = 1 ]; then
-    # Termux/Android pe puppeteer ka Chrome download support nahi karta.
-    # Chrome skip karte hain — config screen mein baileys engine choose hoga
-    # (baileys lightweight hai aur bina Chrome ke chalta hai).
-    log "Termux detected — Chrome download skip ho raha hai (baileys engine use hoga)"
+    # Termux pe puppeteer ka Chrome download support nahi karta.
+    # Termux ke Chromium package use karte hain — whatsapp-web.js engine
+    # real browser se connect hota hai, isliye WhatsApp reject nahi karta.
+    log "Termux detected — Chromium install ho raha hai (whatsapp-web.js engine ke liye)"
+    if ! command -v chromium-browser >/dev/null 2>&1; then
+      pkg install -y chromium
+    fi
     PUPPETEER_SKIP_DOWNLOAD=true npm ci
   else
     npm ci
