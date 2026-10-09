@@ -17,7 +17,7 @@ DEFAULT_CONFIG = {
     "openwa_api_key": "",
     "openwa_session_name": "business-bot",
     "openwa_engine": "whatsapp-web.js",  # ya "baileys"
-    "poll_interval": 5,
+    "poll_interval": 30,
     "cooldown_seconds": 300,
     "rate_limit_per_minute": 20,
     "allow_group_automation": False,

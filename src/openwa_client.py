@@ -32,26 +32,38 @@ class OpenWAClient:
     def _request(self, method: str, path: str, ok=(200, 201), **kwargs):
         headers = kwargs.pop("headers", {})
         headers["X-API-Key"] = self.api_key
-        try:
-            r = requests.request(
-                method,
-                f"{self.base_url}{path}",
-                headers=headers,
-                timeout=30,
-                **kwargs,
-            )
-        except requests.RequestException as e:
-            raise OpenWAError(f"OpenWA service unreachable: {e}")
-        if r.status_code not in ok:
-            raise OpenWAError(
-                f"OpenWA {method} {path} -> {r.status_code}: {r.text[:200]}",
-                status=r.status_code,
-            )
-        if r.content:
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                return r.json()
-            except ValueError:
-                return {}
+                r = requests.request(
+                    method,
+                    f"{self.base_url}{path}",
+                    headers=headers,
+                    timeout=30,
+                    **kwargs,
+                )
+            except requests.RequestException as e:
+                raise OpenWAError(f"OpenWA service unreachable: {e}")
+            if r.status_code == 429 and attempt < max_retries - 1:
+                # Rate limited — thoda wait karke retry
+                wait = 5 * (attempt + 1)
+                self.log.warning(
+                    "OpenWA rate limit (429) — %s mein retry (attempt %s/%s)",
+                    wait, attempt + 1, max_retries,
+                )
+                time.sleep(wait)
+                continue
+            if r.status_code not in ok:
+                raise OpenWAError(
+                    f"OpenWA {method} {path} -> {r.status_code}: {r.text[:200]}",
+                    status=r.status_code,
+                )
+            if r.content:
+                try:
+                    return r.json()
+                except ValueError:
+                    return {}
+            return {}
         return {}
 
     # ---------------- sessions ----------------

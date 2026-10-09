@@ -132,7 +132,7 @@ class TelegramAdminBot:
                     last_status = status
             except Exception as e:
                 self.log.debug("qr_watcher: %s", e)
-            for _ in range(5):
+            for _ in range(30):
                 if self.stop_event.is_set():
                     break
                 await asyncio.sleep(1)
