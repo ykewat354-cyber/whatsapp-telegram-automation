@@ -328,14 +328,16 @@ class TelegramAdminBot:
             )
             return
         text = " ".join(args[1:])
+        # Chromium pe send slow ho sakta hai — pehle "sending" message
+        status_msg = await update.message.reply_text(f"⏳ Message bheja ja raha hai... ({phone})")
         try:
             msg_id = self.openwa.send_text(
                 self.session_id, utils.phone_to_chat_id(phone), text
             )
             self.storage.try_send_slot(self.config.get("rate_limit_per_minute", 20))
-            await update.message.reply_text(f"✅ Message bhej diya gaya ({phone})\nID: {msg_id}")
+            await status_msg.edit_text(f"✅ Message bhej diya gaya ({phone})\nID: {msg_id}")
         except Exception as e:
-            await update.message.reply_text(f"❌ Send failed: {e}")
+            await status_msg.edit_text(f"❌ Send failed: {e}")
 
     async def cmd_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not self._is_admin(update):

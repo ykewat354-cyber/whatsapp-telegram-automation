@@ -29,7 +29,7 @@ class OpenWAClient:
         self.log = logger or utils.logger
         self.session_id: str = None
 
-    def _request(self, method: str, path: str, ok=(200, 201), **kwargs):
+    def _request(self, method: str, path: str, ok=(200, 201), timeout=30, **kwargs):
         headers = kwargs.pop("headers", {})
         headers["X-API-Key"] = self.api_key
         max_retries = 3
@@ -39,7 +39,7 @@ class OpenWAClient:
                     method,
                     f"{self.base_url}{path}",
                     headers=headers,
-                    timeout=30,
+                    timeout=timeout,
                     **kwargs,
                 )
             except requests.RequestException as e:
@@ -122,6 +122,7 @@ class OpenWAClient:
             "POST",
             f"/sessions/{session_id}/messages/send-text",
             json={"chatId": chat_id, "text": text},
+            timeout=120,  # Chromium browser send slow ho sakta hai (Termux)
         )
         return data.get("messageId")
 
