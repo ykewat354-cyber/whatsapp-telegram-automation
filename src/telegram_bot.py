@@ -18,6 +18,7 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
 )
+from telegram.request import HTTPXRequest
 
 from . import utils
 
@@ -582,7 +583,14 @@ class TelegramAdminBot:
         self.session_id = session_id
         self.stop_event = stop_event
         self.start_event = start_event
-        self.application = Application.builder().token(self.token).build()
+        # Longer HTTP timeout — slow networks pe 5s default timeout fail hota hai
+        request = HTTPXRequest(
+            connect_timeout=30.0,
+            read_timeout=30.0,
+            write_timeout=30.0,
+            pool_timeout=10.0,
+        )
+        self.application = Application.builder().token(self.token).request(request).build()
 
         app = self.application
         app.add_handler(CommandHandler("start", self.cmd_start))
@@ -622,5 +630,8 @@ class TelegramAdminBot:
         while not stop_event.is_set():
             await asyncio.sleep(1)
 
+        # Pehle updater stop, phir app — warna "Updater is still running" error
+        if app.updater.running:
+            await app.updater.stop()
         await app.stop()
         await app.shutdown()

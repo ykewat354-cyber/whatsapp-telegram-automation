@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import signal
 import sys
 import threading
@@ -66,6 +67,26 @@ def main() -> None:
 
     utils.setup_logging()
     logger = utils.logger
+
+    # ---- single-instance guard ----
+    # Purana instance background mein chal raha ho to naya start nahi hoga
+    # (Telegram pe "Conflict: terminated by other getUpdates request" error aata hai)
+    lock_file = os.path.join(utils.DATA_DIR, "app.lock")
+    if os.path.exists(lock_file):
+        try:
+            old_pid = int(open(lock_file).read().strip())
+            os.kill(old_pid, 0)  # process check
+            logger.error(
+                "Ek instance pehle se chal raha hai (pid %s).\n"
+                "Pehle use band karein: kill %s\n"
+                "Ya lock delete karein: rm %s",
+                old_pid, old_pid, lock_file,
+            )
+            sys.exit(1)
+        except (ProcessLookupError, ValueError):
+            pass  # purana lock stale hai
+    with open(lock_file, "w") as f:
+        f.write(str(os.getpid()))
 
     config = load_config()
     if args.setup or not is_configured(config):
@@ -138,6 +159,10 @@ def main() -> None:
         start_event.set()
         poller.join(timeout=10)
         service.stop()
+        try:
+            os.remove(lock_file)
+        except OSError:
+            pass
         logger.info("Khatam. Phir se chalane ke liye: python3 run.py")
 
 
