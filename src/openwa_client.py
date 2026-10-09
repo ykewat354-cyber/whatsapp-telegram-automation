@@ -86,6 +86,16 @@ class OpenWAClient:
         data = self._request("GET", f"/sessions/{session_id}/qr")
         return data.get("qrCode"), data.get("status")
 
+    def request_pairing_code(self, session_id: str, phone_number: str) -> str:
+        """QR ke alternative — phone number se 8-char pairing code generate karo."""
+        data = self._request(
+            "POST",
+            f"/sessions/{session_id}/pairing-code",
+            ok=(201,),
+            json={"phoneNumber": phone_number},
+        )
+        return data.get("pairingCode")
+
     # ---------------- messages ----------------
     def get_messages(self, session_id: str, direction: str = "incoming", limit: int = 50) -> list:
         data = self._request(

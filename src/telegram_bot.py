@@ -26,6 +26,7 @@ from . import utils
 COMMANDS = [
     BotCommand("start", "Bot status & welcome"),
     BotCommand("connect", "WhatsApp QR generate karein"),
+    BotCommand("pair", "Phone number se pairing code login (QR alternative)"),
     BotCommand("status", "Poori connection status"),
     BotCommand("all", "Sabko broadcast message bhejein"),
     BotCommand("send", "Specific number pe message bhejein"),
@@ -197,7 +198,90 @@ class TelegramAdminBot:
                 break
             await asyncio.sleep(2)
         if not qr_sent:
-            await update.message.reply_text("❌ QR nahi mila. /status chalake dekhein.")
+            await update.message.reply_text(
+                "❌ QR nahi mila. /status chalake dekhein.\n"
+                "QR ke bajaye /pair <number> se bhi connect kar sakte hain."
+            )
+
+    async def cmd_pair(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """QR ka alternative — phone number se pairing code login."""
+        if not self._is_admin(update):
+            return
+        args = context.args or []
+        if not args:
+            await update.message.reply_text(
+                "Usage: /pair <number>\n"
+                "Example: /pair 919876543210\n\n"
+                "Yeh QR ka alternative hai — phone number se 8-char code generate hoga "
+                "jo WhatsApp mein enter karna hoga."
+            )
+            return
+        phone = utils.normalize_phone(args[0])
+        if not phone:
+            await update.message.reply_text(
+                "❌ Number valid nahi hai. Example: 919876543210"
+            )
+            return
+
+        # Already connected?
+        try:
+            session = self.openwa.get_session(self.session_id)
+            if session.get("status") == "ready":
+                await update.message.reply_text(
+                    f"✅ WhatsApp pehle se connected hai! Number: {session.get('phone')}"
+                )
+                return
+        except Exception:
+            pass
+
+        # Session start karo (agar nahi hua)
+        try:
+            self.openwa.start_session(self.session_id)
+        except Exception as e:
+            self.log.warning("start_session: %s", e)
+
+        await update.message.reply_text(
+            "⏳ Pairing code generate ho raha hai... WhatsApp ready hone ka wait..."
+        )
+
+        # qr_ready hone ka wait karo, phir code request karo
+        code = None
+        for _ in range(30):
+            try:
+                session = self.openwa.get_session(self.session_id)
+                status = session.get("status")
+                if status == "ready":
+                    await update.message.reply_text(
+                        f"✅ WhatsApp already connected! Number: {session.get('phone')}"
+                    )
+                    return
+                if status in ("qr_ready", "authenticating", "initializing"):
+                    code = self.openwa.request_pairing_code(self.session_id, phone)
+                    if code:
+                        break
+            except Exception as e:
+                self.log.debug("pair attempt: %s", e)
+            await asyncio.sleep(2)
+
+        if not code:
+            await update.message.reply_text(
+                "❌ Pairing code generate nahi hua.\n"
+                "Shayad session ready nahi hua. /status check karein, "
+                "ya /connect se QR try karein."
+            )
+            return
+
+        await update.message.reply_text(
+            f"🔑 Pairing Code: {code}\n\n"
+            f"Number: {phone}\n\n"
+            "Is code ko WhatsApp mein enter karein:\n"
+            "1. WhatsApp kholein\n"
+            "2. Settings → Linked Devices → Link a Device\n"
+            "3. 'Link with phone number instead' pe tap karein\n"
+            f"4. Code enter karein: {code}\n\n"
+            "⏰ Code 2 minute mein expire ho jayega.\n"
+            "Connect hote hi main confirm kar dunga."
+        )
 
     async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not self._is_admin(update):
@@ -553,6 +637,7 @@ class TelegramAdminBot:
             "🤖 Admin Commands\n\n"
             "WhatsApp:\n"
             "  /connect — QR generate karke WhatsApp connect karein\n"
+            "  /pair <number> — phone number se pairing code login (QR alternative)\n"
             "  /status — poori status\n\n"
             "Messaging:\n"
             "  /all <message> — sabko broadcast (confirmation ke saath)\n"
@@ -595,6 +680,7 @@ class TelegramAdminBot:
         app = self.application
         app.add_handler(CommandHandler("start", self.cmd_start))
         app.add_handler(CommandHandler("connect", self.cmd_connect))
+        app.add_handler(CommandHandler("pair", self.cmd_pair))
         app.add_handler(CommandHandler("status", self.cmd_status))
         app.add_handler(CommandHandler("all", self.cmd_all))
         app.add_handler(CommandHandler("send", self.cmd_send))

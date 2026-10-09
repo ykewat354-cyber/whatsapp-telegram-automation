@@ -13,6 +13,7 @@ WhatsApp ke liye [OpenWA](https://github.com/rmyndharis/OpenWA) open-source gate
 | Feature | Detail |
 |---|---|
 | 🔌 **QR Connect** | Telegram pe `/connect` → QR Telegram pe bheja jata hai → WhatsApp scan karein |
+| 🔑 **Pairing Code** | `/pair <number>` → 8-char code → WhatsApp mein enter karein (QR alternative) |
 | 💬 **Auto-reply Automation** | Trigger → Reply rules. Message aaye to automatic reply |
 | 🛡️ **Anti-spam (accident-proof)** | First-match-only reply, per-contact cooldown, first-time-only mode, rate limit |
 | 📢 **Broadcast `/all`** | Sabko 1-time message (Good Morning etc.) — **confirmation ke saath** |
@@ -64,8 +65,9 @@ python3 run.py
 ```
 
 1. Startup par Telegram admin ko **"✅ Bot connected"** message jayega
-2. Telegram bot pe **`/connect`** bhejein
-3. QR code Telegram pe milege → WhatsApp → Settings → Linked Devices → scan karein
+2. Telegram bot pe **`/connect`** bhejein (ya **`/pair <number>`** se pairing code login)
+3. **QR code** Telegram pe milega → WhatsApp → Settings → Linked Devices → scan karein
+   - **Pairing code method:** `/pair 919876543210` → code milega → WhatsApp mein enter karein
 4. Connect hote hi **"✅ WhatsApp Connected"** alert + auto-reply shuru!
 
 ---
@@ -76,6 +78,7 @@ python3 run.py
 | Command | Kaam |
 |---|---|
 | `/connect` | QR generate karke WhatsApp connect karein |
+| `/pair <number>` | Phone number se pairing code login (QR alternative) |
 | `status` | Poori connection status |
 
 ### Messaging
