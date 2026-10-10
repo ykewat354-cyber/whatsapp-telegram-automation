@@ -91,6 +91,49 @@ class ScheduledMessageTestCase(unittest.TestCase):
         self.assertGreater(self.storage.get_contact_last_seen("919876543210"), cutoff_1d)
 
 
+class ScheduleParsingTestCase(unittest.TestCase):
+    def test_parse_simple_time(self):
+        from src.telegram_bot import TelegramAdminBot
+        number, time_str, message, is_broadcast, error = TelegramAdminBot._parse_schedule_args(
+            ["919876543210", "14:30", "Hello!"]
+        )
+        self.assertIsNone(error)
+        self.assertEqual(number, "919876543210")
+        self.assertEqual(time_str, "14:30")
+        self.assertEqual(message, "Hello!")
+        self.assertFalse(is_broadcast)
+
+    def test_parse_daily_time(self):
+        from src.telegram_bot import TelegramAdminBot
+        number, time_str, message, is_broadcast, error = TelegramAdminBot._parse_schedule_args(
+            ["919876543210", "daily", "08:00", "Good", "Morning!"]
+        )
+        self.assertIsNone(error)
+        self.assertEqual(time_str, "daily 08:00")
+        self.assertEqual(message, "Good Morning!")
+
+    def test_parse_broadcast(self):
+        from src.telegram_bot import TelegramAdminBot
+        number, time_str, message, is_broadcast, error = TelegramAdminBot._parse_schedule_args(
+            ["all", "08:00", "Offer!"]
+        )
+        self.assertIsNone(error)
+        self.assertTrue(is_broadcast)
+        self.assertEqual(number, "all")
+
+    def test_parse_errors(self):
+        from src.telegram_bot import TelegramAdminBot
+        # Galat time
+        _, _, _, _, error = TelegramAdminBot._parse_schedule_args(["919876543210", "25:00", "Hi"])
+        self.assertEqual(error, "time")
+        # Daily without time
+        _, _, _, _, error = TelegramAdminBot._parse_schedule_args(["919876543210", "daily", "Hi"])
+        self.assertEqual(error, "daily_time")
+        # Galat number
+        _, _, _, _, error = TelegramAdminBot._parse_schedule_args(["abc", "14:30", "Hi"])
+        self.assertEqual(error, "number")
+
+
 class ScheduleTimeParsingTestCase(unittest.TestCase):
     def test_parse_daily_time(self):
         from src.main import _parse_schedule_time

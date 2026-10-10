@@ -100,6 +100,9 @@ def _send_scheduled(openwa, storage, config, msg, logger) -> None:
         else:
             openwa.send_text(openwa.session_id, utils.phone_to_chat_id(number), msg.get("message", ""))
             storage.try_send_slot(config.get("rate_limit_per_minute", 20))
+        # One-time message ko 'sent' mark karo (daily wale pending rahenge)
+        if not msg.get("recurring"):
+            storage.mark_scheduled_sent(msg["id"])
         logger.info("Scheduled message %s sent", msg["id"])
     except Exception as e:
         logger.error("Scheduled message %s failed: %s", msg["id"], e)

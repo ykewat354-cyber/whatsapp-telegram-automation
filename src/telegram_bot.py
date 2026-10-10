@@ -6,6 +6,7 @@ import base64
 import io
 import os
 import subprocess
+import time
 
 from telegram import (
     BotCommand,
@@ -291,49 +292,65 @@ class TelegramAdminBot:
             "Connect hote hi main confirm kar dunga."
         )
 
+    @staticmethod
+    def _parse_schedule_args(args: list):
+        """Schedule command args parse karo.
+        Return (number, time_str, message, is_broadcast) ya error string."""
+        if len(args) < 3:
+            return None, None, None, None, "usage"
+        number = args[0]
+        is_broadcast = number.lower() == "all"
+        if not is_broadcast:
+            phone = utils.normalize_phone(number)
+            if not phone:
+                return None, None, None, None, "number"
+        # "daily HH:MM" ya "HH:MM" format
+        is_daily = args[1].lower() == "daily"
+        if is_daily:
+            if len(args) < 4:
+                return None, None, None, None, "daily_time"
+            time_part = args[2]
+            message = " ".join(args[3:])
+            time_str = f"daily {time_part}"
+        else:
+            time_str = args[1]
+            message = " ".join(args[2:])
+        # Time validate
+        try:
+            check = time_str.replace("daily ", "")
+            h, m = check.split(":")
+            if not (0 <= int(h) < 24 and 0 <= int(m) < 60):
+                raise ValueError
+        except (ValueError, IndexError):
+            return None, None, None, None, "time"
+        if not message:
+            return None, None, None, None, "message"
+        return number, time_str, message, is_broadcast, None
+
     async def cmd_schedule(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Time pe scheduled message bhejein."""
         if not self._is_admin(update):
             return
         args = context.args or []
-        if len(args) < 3:
-            await update.message.reply_text(
-                "Usage: /schedule <number> <HH:MM> <message>\n"
-                "Examples:\n"
-                "  /schedule 919876543210 14:30 Hello! Order ready hai.\n"
-                "  /schedule 919876543210 daily 08:00 Good Morning!\n"
-                "  /schedule all 08:00 Aaj ki offer!\n\n"
-                "List: /schedule_list  |  Cancel: /schedule_cancel <id>"
-            )
+        number, time_str, message, is_broadcast, error = self._parse_schedule_args(args)
+        if error:
+            errors = {
+                "usage": "Usage: /schedule <number> <HH:MM> <message>\n"
+                         "       /schedule <number> daily <HH:MM> <message>\n"
+                         "       /schedule all <HH:MM> <message>",
+                "number": "❌ Number valid nahi hai.",
+                "daily_time": "❌ Daily ke liye time bhi chahiye: /schedule <number> daily <HH:MM> <message>",
+                "time": "❌ Time format galat. HH:MM likhein (e.g. 14:30)",
+                "message": "❌ Message khaali nahi ho sakta.",
+            }
+            await update.message.reply_text(errors[error])
             return
-        # Parse: /schedule <number> <time> <message>
-        number = args[0]
-        time_str = args[1]
-        message = " ".join(args[2:])
-        # "all" = broadcast
-        is_broadcast = number.lower() == "all"
-        if not is_broadcast:
-            phone = utils.normalize_phone(number)
-            if not phone:
-                await update.message.reply_text("❌ Number valid nahi hai.")
-                return
-        # Time parse: HH:MM ya "daily"
-        recurring = time_str.lower() == "daily"
-        if not recurring:
-            try:
-                h, m = time_str.split(":")
-                hour, minute = int(h), int(m)
-                if not (0 <= hour < 24 and 0 <= minute < 60):
-                    raise ValueError
-            except (ValueError, IndexError):
-                await update.message.reply_text("❌ Time format galat. HH:MM likhein (e.g. 14:30)")
-                return
         msg_id = self.storage.next_scheduled_id()
         scheduled = {
             "id": msg_id,
-            "number": "all" if is_broadcast else phone,
+            "number": "all" if is_broadcast else number,
             "time": time_str,
-            "recurring": recurring,
+            "recurring": time_str.startswith("daily"),
             "message": message,
             "created_at": utils.now_ts(),
             "status": "pending",
@@ -342,7 +359,7 @@ class TelegramAdminBot:
         await update.message.reply_text(
             f"✅ Scheduled message {msg_id} add ho gayi:\n\n"
             f"Target: {'Sabko (broadcast)' if is_broadcast else number}\n"
-            f"Time: {time_str}{' (daily recurring)' if recurring else ''}\n"
+            f"Time: {time_str}{' (daily recurring)' if scheduled['recurring'] else ''}\n"
             f"Message: {message}\n\n"
             f"List: /schedule_list  |  Cancel: /schedule_cancel {msg_id}"
         )
@@ -538,6 +555,12 @@ class TelegramAdminBot:
             await query.edit_message_text("❌ Broadcast cancel ho gaya.")
 
     async def _run_broadcast(self, text: str, seconds_filter: int = 0) -> str:
+        """Broadcast ko executor thread mein chalao — event loop block nahi hoga."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._broadcast_sync, text, seconds_filter)
+
+    def _broadcast_sync(self, text: str, seconds_filter: int) -> str:
+        """Sync broadcast — executor thread mein chalta hai (event loop free)."""
         try:
             contacts = self.openwa.get_contacts(self.session_id)
         except Exception as e:
@@ -557,28 +580,29 @@ class TelegramAdminBot:
         sent = failed = skipped = 0
         own = self.storage.get_own_phone()
         delay = self.config.get("broadcast_delay_seconds", 1.0)
+        total = len(contacts)
         for i, c in enumerate(contacts):
             phone = utils.normalize_phone(c.get("number")) or utils.chat_id_to_phone(c.get("id"))
             if not phone or self.storage.is_blacklisted(phone) or (own and phone == own):
                 skipped += 1
                 continue
             if not self.storage.try_send_slot(self.config.get("rate_limit_per_minute", 20)):
-                await asyncio.sleep(5)  # rate limit — thoda wait
+                time.sleep(5)  # rate limit — thoda wait
             try:
                 self.openwa.send_text(self.session_id, utils.phone_to_chat_id(phone), text)
                 sent += 1
             except Exception:
                 failed += 1
-            await asyncio.sleep(delay)
+            time.sleep(delay)
             if (i + 1) % 10 == 0:
-                try:
-                    await self.send_admin(
-                        f"⏳ Broadcast progress: {i + 1}/{len(contacts)} "
+                # Progress update — bridge se event loop mein bhejo
+                self.bridge.run_async(
+                    self.send_admin(
+                        f"⏳ Broadcast progress: {i + 1}/{total} "
                         f"(sent {sent}, failed {failed}, skipped {skipped})"
                     )
-                except Exception:
-                    pass
-        filter_info = f" (last {days}d)" if days > 0 else ""
+                )
+        filter_info = f" (last {seconds_filter // 86400}d)" if seconds_filter >= 86400 else ""
         return (
             f"✅ Broadcast complete!{filter_info}\n\n"
             f"Sent: {sent}\nFailed: {failed}\nSkipped (blacklist/own): {skipped}"
@@ -752,7 +776,7 @@ class TelegramAdminBot:
         await update.message.reply_text("🔄 Bot restart ho raha hai... (5 second)")
         # Restart flag set karo — main loop detect karega
         self._restart_requested = True
-        asyncio.get_event_loop().call_later(3, self._do_restart)
+        asyncio.get_running_loop().call_later(3, self._do_restart)
 
     def _do_restart(self) -> None:
         """Process ko naye instance se replace karo."""
@@ -784,7 +808,7 @@ class TelegramAdminBot:
             )
             await asyncio.sleep(2)
             self._restart_requested = True
-            asyncio.get_event_loop().call_later(3, self._do_restart)
+            asyncio.get_running_loop().call_later(3, self._do_restart)
         except Exception as e:
             await status_msg.edit_text(f"❌ Update error: {e}")
 

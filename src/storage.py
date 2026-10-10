@@ -207,3 +207,15 @@ class Storage:
                 if m["id"].startswith("s") and m["id"][1:].isdigit()
             ]
             return f"s{max(nums) + 1 if nums else 1}"
+
+    def mark_scheduled_sent(self, msg_id: str) -> bool:
+        """One-time message ko 'sent' mark karo."""
+        with self._lock:
+            data = self._read("scheduled_messages.json", {"messages": []})
+            for m in data["messages"]:
+                if m["id"] == msg_id:
+                    m["status"] = "sent"
+                    m["sent_at"] = time.time()
+                    self._write("scheduled_messages.json", data)
+                    return True
+            return False
