@@ -56,5 +56,35 @@ def is_group_chat(chat_id) -> bool:
     return bool(chat_id) and str(chat_id).endswith("@g.us")
 
 
+def contact_saved_flag(contact) -> "bool | None":
+    """Contact dict se 'saved in address book' flag. Flag na mile to None (unknown)."""
+    if not isinstance(contact, dict):
+        return None
+    for key in ("isMyContact", "is_my_contact", "isSaved", "saved"):
+        v = contact.get(key)
+        if isinstance(v, bool):
+            return v
+    return None
+
+
+def individual_chat_phone(chat) -> "str | None":
+    """Sirf 1-to-1 chat ka phone number. Group/channel/status/broadcast -> None."""
+    if not isinstance(chat, dict):
+        return None
+    cid = chat.get("id") or chat.get("chatId")
+    if isinstance(cid, dict):
+        cid = cid.get("_serialized")
+    cid = str(cid or "")
+    if not cid.endswith("@c.us"):  # @g.us (group), @newsletter, @broadcast, @lid sab skip
+        return None
+    if chat.get("kind") not in (None, "individual"):
+        return None
+    if chat.get("isGroup") is True:
+        return None
+    if any(chat.get(key) is True for key in ("archived", "isArchived", "is_archived")):
+        return None
+    return chat_id_to_phone(cid)
+
+
 def now_ts() -> float:
     return time.time()

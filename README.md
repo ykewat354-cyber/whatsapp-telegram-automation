@@ -16,7 +16,7 @@ use hota hai — whatsapp-web.js engine + real Chromium browser se connect hota 
 | 🔑 **Pairing Code** | `/pair <number>` → 8-char code → WhatsApp mein enter karein |
 | 💬 **Auto-reply Automation** | Trigger → Reply rules. Message aaye to automatic reply |
 | 🛡️ **Anti-spam** | First-match-only, per-contact cooldown, first-time-only mode, rate limit |
-| 📢 **Broadcast `/all`** | Sabko 1-time message — **confirmation ke saath** |
+| 📢 **Broadcast `/all`** | Pichhle 90 din active, non-archived 1-to-1 chats (saved/unsaved) — **confirmation ke saath** |
 | 🎯 **Specific number `/send`** | Telegram se kisi bhi number pe direct message |
 | 🚫 **Blacklist** | `/blacklist_add` / `/blacklist_remove` — unko koi message nahi jayega |
 | 📋 **Automation Admin** | `/automation_add` / `edit` / `remove` / `toggle` — sab Telegram se |
@@ -87,7 +87,7 @@ python3 run.py
 ### Messaging
 | Command | Kaam |
 |---|---|
-| `/all <message>` | Sabko broadcast (Confirm/Cancel ke saath) |
+| `/all <message>` | Pichhle 90 din active 1-to-1 chats (saved/unsaved; archived/groups excluded), confirmation ke saath |
 | `/send <number> <message>` | Specific number pe message |
 
 ### Automations
@@ -133,7 +133,7 @@ python3 run.py
 3. **Per-contact cooldown** — same person pe dobara reply gap ke baad hi
 4. **Global cooldown** — rule chalane ka overall gap
 5. **Rate limiter** — max N messages/minute (account safe rakhta hai)
-6. **Broadcast confirmation** — `/all` pehle Confirm maangta hai
+6. **Broadcast confirmation** — `/all` pehle Confirm maangta hai; sirf pichhle 90 din mein active, non-archived 1-to-1 chats (saved/unsaved) include hote hain
 7. **Blacklist** — blocked numbers ko koi message nahi (auto + broadcast)
 8. **Group skip** — group messages pe auto-reply band (default)
 9. **Own-number skip** — apne number pe reply nahi

@@ -1,6 +1,7 @@
 """OpenWA REST API client + local Node.js service manager."""
 from __future__ import annotations
 
+import json
 import os
 import socket
 import subprocess
@@ -126,8 +127,44 @@ class OpenWAClient:
         )
         return data.get("messageId")
 
+    @staticmethod
+    def _as_list(data) -> list:
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for key in ("chats", "contacts", "data", "items", "results"):
+                if isinstance(data.get(key), list):
+                    return data[key]
+        return []
+
+    def _list_paged(self, path: str, page: int = 100, max_pages: int = 50) -> list:
+        """List endpoint ko page-by-page padho (limit/offset). Paging na chale to ek call."""
+        out, seen = [], set()
+        for i in range(max_pages):
+            try:
+                data = self._request("GET", path, params={"limit": page, "offset": i * page})
+            except OpenWAError as e:
+                if i == 0 and e.status == 400:
+                    return self._as_list(self._request("GET", path))
+                raise
+            items = self._as_list(data)
+            new = 0
+            for it in items:
+                key = json.dumps(it, sort_keys=True, default=str)
+                if key not in seen:
+                    seen.add(key)
+                    out.append(it)
+                    new += 1
+            if len(items) < page or new == 0:
+                break
+        return out
+
     def get_contacts(self, session_id: str) -> list:
-        return self._request("GET", f"/sessions/{session_id}/contacts")
+        return self._list_paged(f"/sessions/{session_id}/contacts")
+
+    def get_chats(self, session_id: str) -> list:
+        """Saari chats (jo aapne shuru ki wo bhi, jo aapko aayi wo bhi)."""
+        return self._list_paged(f"/sessions/{session_id}/chats")
 
 
 class OpenWAService:

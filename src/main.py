@@ -67,6 +67,7 @@ def main() -> None:
 
     utils.setup_logging()
     logger = utils.logger
+    os.makedirs(utils.DATA_DIR, exist_ok=True)
 
     # ---- single-instance guard ----
     # Purana instance background mein chal raha ho to naya start nahi hoga
