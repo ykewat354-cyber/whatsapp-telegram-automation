@@ -69,16 +69,8 @@ def is_termux() -> bool:
 
 def detect_chromium_path() -> "str | None":
     """Termux pe installed Chromium ka path dhundo."""
-    candidates = [
-        "/data/data/com.termux/files/usr/bin/chromium-browser",
-        "/data/data/com.termux/files/usr/bin/chromium",
-        "/usr/bin/chromium-browser",
-        "/usr/bin/chromium",
-    ]
-    for path in candidates:
-        if os.path.exists(path):
-            return path
-    return None
+    from .chromium import detect_chromium
+    return detect_chromium()
 
 
 def detect_openwa_api_key() -> "str | None":

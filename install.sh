@@ -117,14 +117,35 @@ fi
 cd "$INSTALL_DIR/openwa"
 if [ ! -d node_modules ]; then
   log "OpenWA dependencies install ho rahi hain (2-5 minute lag sakte hain)..."
-  if [ "$IS_TERMUX" = 1 ]; then
-    # Termux pe puppeteer ka Chrome download support nahi karta.
-    # Termux ke Chromium package use karte hain — whatsapp-web.js engine
-    # real browser se connect hota hai, isliye WhatsApp reject nahi karta.
-    log "Termux detected — Chromium install ho raha hai (whatsapp-web.js engine ke liye)"
-    if ! command -v chromium-browser >/dev/null 2>&1; then
-      pkg install -y chromium
+  # Chromium auto-install — Termux pe pkg, desktop pe apt/brew
+  CHROMIUM_BIN=""
+  if command -v chromium-browser >/dev/null 2>&1; then
+    CHROMIUM_BIN=$(command -v chromium-browser)
+  elif command -v chromium >/dev/null 2>&1; then
+    CHROMIUM_BIN=$(command -v chromium)
+  fi
+  if [ -z "$CHROMIUM_BIN" ]; then
+    log "Chromium nahi mila — auto-install ho raha hai..."
+    if [ "$IS_TERMUX" = 1 ]; then
+      pkg install -y chromium >/dev/null 2>&1 || true
+    elif [ "$IS_MAC" = 1 ]; then
+      brew install --cask chromium >/dev/null 2>&1 || true
+    elif [ "$IS_LINUX" = 1 ]; then
+      sudo apt-get install -y chromium-browser >/dev/null 2>&1 || true
     fi
+    # Install ke baad dobara check
+    if command -v chromium-browser >/dev/null 2>&1; then
+      CHROMIUM_BIN=$(command -v chromium-browser)
+    elif command -v chromium >/dev/null 2>&1; then
+      CHROMIUM_BIN=$(command -v chromium)
+    fi
+  fi
+  if [ -n "$CHROMIUM_BIN" ]; then
+    log "Chromium mil gaya: $CHROMIUM_BIN"
+  else
+    warn "Chromium auto-install fail — puppeteer default Chrome use hoga"
+  fi
+  if [ "$IS_TERMUX" = 1 ]; then
     PUPPETEER_SKIP_DOWNLOAD=true npm ci
   else
     npm ci
