@@ -9,5 +9,7 @@
   "cooldown_seconds": 300,
   "rate_limit_per_minute": 20,
   "allow_group_automation": false,
-  "broadcast_delay_seconds": 1.5
+  "broadcast_delay_seconds": 1.5,
+  "broadcast_active_days": 90,
+  "broadcast_max_recipients": 100
 }

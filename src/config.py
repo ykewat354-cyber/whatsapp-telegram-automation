@@ -22,6 +22,12 @@ DEFAULT_CONFIG = {
     "rate_limit_per_minute": 20,
     "allow_group_automation": False,
     "broadcast_delay_seconds": 1.0,
+    # True = saved (address-book) contacts ko kabhi auto-reply/broadcast nahi jayega
+    "only_unsaved_contacts": True,
+    # /all ek baar mein itne se zyada chats ko nahi bhejega (galti se bade broadcast se bachne ke liye)
+    "broadcast_max_recipients": 100,
+    # Broadcast ke liye chat mein itne din ke andar activity honi chahiye
+    "broadcast_active_days": 90,
 }
 
 ENV_TEMPLATE = os.path.join(utils.PROJECT_ROOT, "openwa.env.template")

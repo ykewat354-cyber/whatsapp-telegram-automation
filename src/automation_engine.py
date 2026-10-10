@@ -6,6 +6,15 @@ import re
 from . import utils
 
 
+class TooManyTargets(Exception):
+    """Broadcast targets configured limit se zyada."""
+
+    def __init__(self, count: int, limit: int):
+        super().__init__(f"{count} chats mili, limit {limit} hai")
+        self.count = count
+        self.limit = limit
+
+
 class AutomationEngine:
     """
     Har incoming WhatsApp message pe chalti hai.
@@ -27,6 +36,71 @@ class AutomationEngine:
         self.log = logger or utils.logger
         self.notify = None  # sync callable — admin Telegram par alert bhejne ke liye
         self._rate_limit_warned = False
+        self._saved_cache = None
+        self._saved_cache_ts = 0.0
+
+    # ---------------- saved-contact guard ----------------
+    def saved_numbers(self, force: bool = False) -> set:
+        """Address-book mein saved numbers (cache 2 min). Fail hone par exception."""
+        now = utils.now_ts()
+        if not force and self._saved_cache is not None and now - self._saved_cache_ts < 120:
+            return self._saved_cache
+        contacts = self.openwa.get_contacts(self.openwa.session_id)
+        if isinstance(contacts, dict):
+            contacts = contacts.get("contacts", [])
+        if not isinstance(contacts, list) or not contacts:
+            raise RuntimeError("contact list empty/unavailable")
+        saved = set()
+        for c in contacts:
+            phone = utils.normalize_phone(c.get("number")) or utils.chat_id_to_phone(c.get("id"))
+            if not phone:
+                continue
+            # saved ya flag unknown => protected (safe side). Sirf clearly-unsaved allowed.
+            if utils.contact_saved_flag(c) is not False:
+                saved.add(phone)
+        self._saved_cache = saved
+        self._saved_cache_ts = now
+        return saved
+
+    def is_saved(self, phone: str) -> bool:
+        """True = is number ko message NAHI jayega. Error aaye to bhi True (fail-closed)."""
+        try:
+            return phone in self.saved_numbers()
+        except Exception as e:
+            self.log.warning("Saved-contact check fail (%s) — safety ke liye skip: %s", e, phone)
+            return True
+
+    def active_chat_targets(
+        self, max_recipients: int = None, active_days: int = 90
+    ) -> list:
+        """
+        Broadcast targets = recent activity wali 1-to-1 chats, saved ya unsaved.
+        Archived chats, groups/channels/status aur purani chats exclude hoti hain.
+        """
+        if active_days <= 0:
+            raise ValueError("active_days must be greater than zero")
+        cutoff = utils.now_ts() - active_days * 24 * 60 * 60
+        own = self.storage.get_own_phone()
+        chats = self.openwa.get_chats(self.openwa.session_id)
+        out, seen = [], set()
+        for c in chats:
+            timestamp = c.get("timestamp") if isinstance(c, dict) else None
+            if (
+                isinstance(timestamp, bool)
+                or not isinstance(timestamp, (int, float))
+                or timestamp <= cutoff
+            ):
+                continue
+            phone = utils.individual_chat_phone(c)
+            if not phone or phone in seen:
+                continue
+            seen.add(phone)
+            if self.storage.is_blacklisted(phone) or (own and phone == own):
+                continue
+            out.append(phone)
+        if max_recipients and len(out) > max_recipients:
+            raise TooManyTargets(len(out), max_recipients)
+        return out
 
     # ---------------- matching ----------------
     @staticmethod
@@ -73,6 +147,11 @@ class AutomationEngine:
         # apna khud ka number
         own = self.storage.get_own_phone()
         if own and phone == own:
+            return
+
+        # saved contacts (friends/family) ko kabhi auto-reply nahi
+        if self.config.get("only_unsaved_contacts", True) and self.is_saved(phone):
+            self.log.debug("Saved contact skip: %s", phone)
             return
 
         # first_time_only check (mark se PEHLE)

@@ -21,6 +21,7 @@ from telegram.ext import (
 from telegram.request import HTTPXRequest
 
 from . import utils
+from .automation_engine import TooManyTargets
 
 # Yeh commands Telegram ke "/" menu mein load ho jayenge
 COMMANDS = [
@@ -28,7 +29,8 @@ COMMANDS = [
     BotCommand("connect", "WhatsApp QR generate karein"),
     BotCommand("pair", "Phone number se pairing code login (QR alternative)"),
     BotCommand("status", "Poori connection status"),
-    BotCommand("all", "Sabko broadcast message bhejein"),
+    BotCommand("all", "Pichhle 90 din active chats ko broadcast"),
+    BotCommand("contacts_check", "Active chats aur group detection check"),
     BotCommand("send", "Specific number pe message bhejein"),
     BotCommand("automation_add", "Naya automation rule banayein"),
     BotCommand("automation_list", "Saari automations dekhein"),
@@ -340,38 +342,93 @@ class TelegramAdminBot:
             await status_msg.edit_text(f"❌ Send failed: {e}")
 
     async def cmd_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Pichhle configured dinon mein active 1-to-1 chats ko broadcast."""
         if not self._is_admin(update):
             return
         text = " ".join(context.args or [])
         if not text:
             await update.message.reply_text(
-                "Usage: /all <message>\nExample: /all Good morning! Aaj ki offer..."
+                "Usage: /all <message>\n"
+                "Ye sirf pichhle configured dinon mein active 1-to-1 chats ko jayega "
+                "(saved/unsaved dono). Archived chats aur groups include nahi honge."
             )
             return
+        limit = int(self.config.get("broadcast_max_recipients", 100))
+        active_days = int(self.config.get("broadcast_active_days", 90))
         try:
-            contacts = self.openwa.get_contacts(self.session_id)
+            targets = self.engine.active_chat_targets(limit, active_days)
+        except TooManyTargets as e:
+            await update.message.reply_text(
+                f"⛔ {e.count} recent chats mili, par limit {e.limit} hai. Kuch nahi bheja.\n"
+                "Limit badhani ho to data/config.json mein broadcast_max_recipients badlein."
+            )
+            return
         except Exception as e:
             await update.message.reply_text(
-                f"❌ Contacts nahi mil sake: {e}\nWhatsApp connected hai? /status chalayein."
+                f"❌ Safety check fail ({e}). Kuch nahi bheja.\n"
+                "WhatsApp connected hai? /contacts_check chalayein."
             )
             return
-        n = len(contacts)
+        n = len(targets)
         if n == 0:
-            await update.message.reply_text("❌ Koi contact nahi mila.")
+            await update.message.reply_text(
+                f"❌ Pichhle {active_days} din mein koi active 1-to-1 chat nahi mili. Kuch nahi bheja."
+            )
             return
         self.pending_broadcast = text
         keyboard = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(f"✅ Confirm ({n} contacts)", callback_data="bc:confirm"),
-                    InlineKeyboardButton("❌ Cancel", callback_data="bc:cancel"),
-                ]
-            ]
+            [[
+                InlineKeyboardButton(f"✅ Confirm ({n} recent chats)", callback_data="bc:confirm"),
+                InlineKeyboardButton("❌ Cancel", callback_data="bc:cancel"),
+            ]]
         )
+        preview = ", ".join(targets[:5]) + (" ..." if n > 5 else "")
         await update.message.reply_text(
             f"⚠️ Broadcast confirm karein:\n\n{text}\n\n"
-            f"{n} contacts ko yeh message jayega (rate limit ke saath, thoda time lagega).",
+            f"{n} chats ko jayega jisme pichhle {active_days} din mein activity hui "
+            f"(saved/unsaved dono; archived chats aur groups nahi).\n"
+            f"Pehle kuch numbers: {preview}",
             reply_markup=keyboard,
+        )
+
+    async def cmd_contacts_check(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Debug: saved/unsaved aur group detection sahi kaam kar raha hai ya nahi."""
+        if not self._is_admin(update):
+            return
+        try:
+            contacts = self.openwa.get_contacts(self.session_id)
+            chats = self.openwa.get_chats(self.session_id)
+        except Exception as e:
+            await update.message.reply_text(f"❌ Data nahi mila: {e}")
+            return
+        flags = {"saved": 0, "unsaved": 0, "unknown": 0}
+        for c in contacts:
+            f = utils.contact_saved_flag(c)
+            flags["unknown" if f is None else ("saved" if f else "unsaved")] += 1
+        active_days = int(self.config.get("broadcast_active_days", 90))
+        individual = sum(
+            1
+            for c in chats
+            if utils.individual_chat_phone(c)
+            and isinstance(c.get("timestamp"), (int, float))
+            and not isinstance(c.get("timestamp"), bool)
+            and c["timestamp"] > utils.now_ts() - active_days * 24 * 60 * 60
+        )
+        try:
+            n_targets = len(self.engine.active_chat_targets(active_days=active_days))
+        except Exception as e:
+            n_targets = f"error ({e})"
+        c_keys = sorted(contacts[0].keys()) if contacts and isinstance(contacts[0], dict) else []
+        h_keys = sorted(chats[0].keys()) if chats and isinstance(chats[0], dict) else []
+        await update.message.reply_text(
+            f"Contacts: {len(contacts)} (saved {flags['saved']}, unsaved {flags['unsaved']}, "
+            f"flag unknown {flags['unknown']})\n"
+            f"Chats: {len(chats)} (pichhle {active_days} din ki 1-to-1 activity: {individual}, "
+            f"baaki purani/archived/groups/channels: "
+            f"{len(chats) - individual})\n"
+            f"/all ke targets (pichhle {active_days} din, saved/unsaved): {n_targets}\n\n"
+            f"Contact fields: {', '.join(c_keys)}\n"
+            f"Chat fields: {', '.join(h_keys)}"
         )
 
     async def on_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -390,20 +447,15 @@ class TelegramAdminBot:
             await query.edit_message_text("❌ Broadcast cancel ho gaya.")
 
     async def _run_broadcast(self, text: str) -> str:
+        limit = int(self.config.get("broadcast_max_recipients", 100))
+        active_days = int(self.config.get("broadcast_active_days", 90))
         try:
-            contacts = self.openwa.get_contacts(self.session_id)
+            targets = self.engine.active_chat_targets(limit, active_days)
         except Exception as e:
-            return f"❌ Contacts fetch failed: {e}"
-        sent = failed = skipped = 0
-        own = self.storage.get_own_phone()
+            return f"❌ Safety check fail ({e}). Kuch nahi bheja."
+        sent = failed = 0
         delay = self.config.get("broadcast_delay_seconds", 1.5)
-        for i, c in enumerate(contacts):
-            phone = utils.normalize_phone(c.get("number")) or utils.chat_id_to_phone(
-                c.get("id")
-            )
-            if not phone or self.storage.is_blacklisted(phone) or (own and phone == own):
-                skipped += 1
-                continue
+        for i, phone in enumerate(targets):
             if not self.storage.try_send_slot(self.config.get("rate_limit_per_minute", 20)):
                 await asyncio.sleep(5)  # rate limit — thoda wait
             try:
@@ -415,15 +467,11 @@ class TelegramAdminBot:
             if (i + 1) % 10 == 0:
                 try:
                     await self.send_admin(
-                        f"⏳ Broadcast progress: {i + 1}/{len(contacts)} "
-                        f"(sent {sent}, failed {failed}, skipped {skipped})"
+                        f"⏳ Broadcast progress: {i + 1}/{len(targets)} (sent {sent}, failed {failed})"
                     )
                 except Exception:
                     pass
-        return (
-            f"✅ Broadcast complete!\n\n"
-            f"Sent: {sent}\nFailed: {failed}\nSkipped (blacklist/own): {skipped}"
-        )
+        return f"✅ Broadcast complete!\n\nSent: {sent}\nFailed: {failed}"
 
     # ---------------- automations ----------------
     @staticmethod
@@ -642,7 +690,8 @@ class TelegramAdminBot:
             "  /pair <number> — phone number se pairing code login (QR alternative)\n"
             "  /status — poori status\n\n"
             "Messaging:\n"
-            "  /all <message> — sabko broadcast (confirmation ke saath)\n"
+            "  /all <message> — pichhle 90 din active 1-to-1 chats (saved/unsaved)\n"
+            "  /contacts_check — contacts aur active chat detection check\n"
             "  /send <number> <message> — specific number pe bhejein\n\n"
             "Automations (WhatsApp pe message aaye to auto-reply):\n"
             "  /automation_add <trigger> => <reply>\n"
@@ -685,6 +734,7 @@ class TelegramAdminBot:
         app.add_handler(CommandHandler("pair", self.cmd_pair))
         app.add_handler(CommandHandler("status", self.cmd_status))
         app.add_handler(CommandHandler("all", self.cmd_all))
+        app.add_handler(CommandHandler("contacts_check", self.cmd_contacts_check))
         app.add_handler(CommandHandler("send", self.cmd_send))
         app.add_handler(CommandHandler("automation_add", self.cmd_automation_add))
         app.add_handler(CommandHandler("automation_list", self.cmd_automation_list))

@@ -44,6 +44,7 @@ class EngineTestCase(unittest.TestCase):
             "cooldown_seconds": 300,
             "rate_limit_per_minute": 20,
             "allow_group_automation": False,
+            "only_unsaved_contacts": False,  # purane tests: guard off
         }
         self.engine = AutomationEngine(self.storage, self.config, self.openwa)
 
