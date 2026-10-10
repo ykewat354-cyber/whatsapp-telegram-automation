@@ -31,6 +31,80 @@ class AsyncBridge:
         return None
 
 
+def scheduler_loop(openwa, storage, config, stop_event, start_event, logger) -> None:
+    """Background thread: scheduled messages check karke bhejta hai."""
+    logger.info("Scheduler ready")
+    start_event.wait(timeout=120)
+    while not stop_event.is_set():
+        try:
+            if openwa.session_id:
+                session = openwa.get_session(openwa.session_id)
+                if session.get("status") == "ready":
+                    now = utils.now_ts()
+                    for msg in storage.list_scheduled():
+                        if msg.get("status") != "pending":
+                            continue
+                        send_time = _parse_schedule_time(msg, now)
+                        if send_time and send_time <= now:
+                            _send_scheduled(openwa, storage, config, msg, logger)
+        except Exception as e:
+            logger.error("Scheduler error: %s", e)
+        stop_event.wait(30)  # har 30s mein check
+    logger.info("Scheduler stopped")
+
+
+def _parse_schedule_time(msg: dict, now: float) -> float:
+    """Scheduled message ka send time timestamp return karo."""
+    import datetime
+    time_str = msg.get("time", "")
+    # "daily HH:MM" ya "daily" format handle karo
+    if time_str.lower().startswith("daily"):
+        try:
+            time_part = time_str.lower().replace("daily", "").strip()
+            if not time_part:
+                return 0
+            h, m = time_part.split(":")
+            target = datetime.datetime.now().replace(hour=int(h), minute=int(m), second=0)
+            if target.timestamp() < now:
+                target += datetime.timedelta(days=1)
+            return target.timestamp()
+        except (ValueError, IndexError):
+            return 0
+    try:
+        h, m = time_str.split(":")
+        target = datetime.datetime.now().replace(hour=int(h), minute=int(m), second=0)
+        if target.timestamp() < now:
+            return 0  # already past — skip
+        return target.timestamp()
+    except (ValueError, IndexError):
+        return 0
+
+
+def _send_scheduled(openwa, storage, config, msg, logger) -> None:
+    """Scheduled message bhejo."""
+    try:
+        number = msg.get("number", "")
+        if number == "all":
+            logger.info("Scheduled broadcast: %s", msg.get("message", "")[:50])
+            # Broadcast ke liye contacts fetch karo
+            contacts = openwa.get_contacts(openwa.session_id)
+            for c in contacts:
+                phone = utils.normalize_phone(c.get("number")) or utils.chat_id_to_phone(c.get("id"))
+                if not phone or storage.is_blacklisted(phone):
+                    continue
+                try:
+                    openwa.send_text(openwa.session_id, utils.phone_to_chat_id(phone), msg.get("message", ""))
+                    storage.try_send_slot(config.get("rate_limit_per_minute", 20))
+                except Exception:
+                    pass
+        else:
+            openwa.send_text(openwa.session_id, utils.phone_to_chat_id(number), msg.get("message", ""))
+            storage.try_send_slot(config.get("rate_limit_per_minute", 20))
+        logger.info("Scheduled message %s sent", msg["id"])
+    except Exception as e:
+        logger.error("Scheduled message %s failed: %s", msg["id"], e)
+
+
 def poller_loop(openwa, engine, storage, config, stop_event, start_event, logger) -> None:
     """Background thread: incoming WhatsApp messages poll karke engine ko deta hai."""
     logger.info("Message poller ready")
@@ -140,6 +214,13 @@ def main() -> None:
     )
     poller.start()
 
+    scheduler = threading.Thread(
+        target=scheduler_loop,
+        args=(client, storage, config, stop_event, start_event, logger),
+        daemon=True,
+    )
+    scheduler.start()
+
     def shutdown(*_):
         logger.info("Shutdown ho raha hai...")
         stop_event.set()
@@ -158,6 +239,7 @@ def main() -> None:
         stop_event.set()
         start_event.set()
         poller.join(timeout=10)
+        scheduler.join(timeout=10)
         service.stop()
         try:
             os.remove(lock_file)

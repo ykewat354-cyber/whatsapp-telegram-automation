@@ -18,6 +18,7 @@ use hota hai — whatsapp-web.js engine + real Chromium browser se connect hota 
 | 🛡️ **Anti-spam** | First-match-only, per-contact cooldown, first-time-only mode, rate limit |
 | 📢 **Broadcast `/all`** | Sabko 1-time message — **confirmation ke saath** |
 | 🎯 **Specific number `/send`** | Telegram se kisi bhi number pe direct message |
+| ⏰ **Scheduled Messages** | `/schedule 91708720 14:30 Hello!` — time pe auto message |
 | 🚫 **Blacklist** | `/blacklist_add` / `/blacklist_remove` — unko koi message nahi jayega |
 | 📋 **Automation Admin** | `/automation_add` / `edit` / `remove` / `toggle` — sab Telegram se |
 | ⌨️ **Command Menu** | Bot mein `/` likhte hi saare commands load ho jate hain |
@@ -88,7 +89,17 @@ python3 run.py
 | Command | Kaam |
 |---|---|
 | `/all <message>` | Sabko broadcast (Confirm/Cancel ke saath) |
+| `/all <days>d <message>` | Sirf recent contacts ko (1d, 7d, 30d) |
 | `/send <number> <message>` | Specific number pe message |
+
+### Scheduled Messages
+| Command | Kaam |
+|---|---|
+| `/schedule <number> <HH:MM> <message>` | Time pe message bhejein |
+| `/schedule <number> daily <HH:MM> <message>` | Daily recurring message |
+| `/schedule all <HH:MM> <message>` | Sabko time pe broadcast |
+| `/schedule_list` | Scheduled messages dekhein |
+| `/schedule_cancel <id>` | Scheduled message cancel karein |
 
 ### Automations
 | Command | Kaam |
@@ -106,6 +117,12 @@ python3 run.py
 | `/blacklist_add <number>` | Number block karein |
 | `/blacklist_remove <number>` | Number unblock karein |
 | `/blacklist_list` | Blacklist dekhein |
+
+### System
+| Command | Kaam |
+|---|---|
+| `/restart` | Bot restart karein |
+| `/update` | GitHub se latest update karein |
 
 ---
 

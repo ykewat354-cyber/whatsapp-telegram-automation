@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
+import os
+import subprocess
 
 from telegram import (
     BotCommand,
@@ -28,8 +30,11 @@ COMMANDS = [
     BotCommand("connect", "WhatsApp QR generate karein"),
     BotCommand("pair", "Phone number se pairing code login (QR alternative)"),
     BotCommand("status", "Poori connection status"),
-    BotCommand("all", "Sabko broadcast message bhejein"),
+    BotCommand("all", "Sabko broadcast (days filter: /all 1d, /all 7d)"),
     BotCommand("send", "Specific number pe message bhejein"),
+    BotCommand("schedule", "Time pe scheduled message bhejein"),
+    BotCommand("schedule_list", "Scheduled messages dekhein"),
+    BotCommand("schedule_cancel", "Scheduled message cancel karein"),
     BotCommand("automation_add", "Naya automation rule banayein"),
     BotCommand("automation_list", "Saari automations dekhein"),
     BotCommand("automation_edit", "Automation edit karein"),
@@ -39,6 +44,8 @@ COMMANDS = [
     BotCommand("blacklist_add", "Number blacklist karein"),
     BotCommand("blacklist_remove", "Number unblock karein"),
     BotCommand("blacklist_list", "Blacklist dekhein"),
+    BotCommand("restart", "Bot restart karein"),
+    BotCommand("update", "GitHub se latest update karein"),
     BotCommand("help", "Madad"),
 ]
 
@@ -59,6 +66,7 @@ class TelegramAdminBot:
         self.start_event = None
         self.application: Application = None
         self.pending_broadcast: str = None
+        self._restart_requested: bool = False
 
     # ---------------- helpers ----------------
     def _is_admin(self, update: Update) -> bool:
@@ -283,6 +291,93 @@ class TelegramAdminBot:
             "Connect hote hi main confirm kar dunga."
         )
 
+    async def cmd_schedule(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Time pe scheduled message bhejein."""
+        if not self._is_admin(update):
+            return
+        args = context.args or []
+        if len(args) < 3:
+            await update.message.reply_text(
+                "Usage: /schedule <number> <HH:MM> <message>\n"
+                "Examples:\n"
+                "  /schedule 919876543210 14:30 Hello! Order ready hai.\n"
+                "  /schedule 919876543210 daily 08:00 Good Morning!\n"
+                "  /schedule all 08:00 Aaj ki offer!\n\n"
+                "List: /schedule_list  |  Cancel: /schedule_cancel <id>"
+            )
+            return
+        # Parse: /schedule <number> <time> <message>
+        number = args[0]
+        time_str = args[1]
+        message = " ".join(args[2:])
+        # "all" = broadcast
+        is_broadcast = number.lower() == "all"
+        if not is_broadcast:
+            phone = utils.normalize_phone(number)
+            if not phone:
+                await update.message.reply_text("❌ Number valid nahi hai.")
+                return
+        # Time parse: HH:MM ya "daily"
+        recurring = time_str.lower() == "daily"
+        if not recurring:
+            try:
+                h, m = time_str.split(":")
+                hour, minute = int(h), int(m)
+                if not (0 <= hour < 24 and 0 <= minute < 60):
+                    raise ValueError
+            except (ValueError, IndexError):
+                await update.message.reply_text("❌ Time format galat. HH:MM likhein (e.g. 14:30)")
+                return
+        msg_id = self.storage.next_scheduled_id()
+        scheduled = {
+            "id": msg_id,
+            "number": "all" if is_broadcast else phone,
+            "time": time_str,
+            "recurring": recurring,
+            "message": message,
+            "created_at": utils.now_ts(),
+            "status": "pending",
+        }
+        self.storage.add_scheduled(scheduled)
+        await update.message.reply_text(
+            f"✅ Scheduled message {msg_id} add ho gayi:\n\n"
+            f"Target: {'Sabko (broadcast)' if is_broadcast else number}\n"
+            f"Time: {time_str}{' (daily recurring)' if recurring else ''}\n"
+            f"Message: {message}\n\n"
+            f"List: /schedule_list  |  Cancel: /schedule_cancel {msg_id}"
+        )
+
+    async def cmd_schedule_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not self._is_admin(update):
+            return
+        messages = self.storage.list_scheduled()
+        if not messages:
+            await update.message.reply_text("Koi scheduled message nahi hai.")
+            return
+        lines = [f"⏰ Scheduled Messages ({len(messages)}):"]
+        for m in messages:
+            status = "✅" if m.get("status") == "pending" else "❌"
+            target = "Sabko" if m.get("number") == "all" else m.get("number")
+            recurring = " (daily)" if m.get("recurring") else ""
+            lines.append(
+                f"{status} {m['id']}: {target} @ {m['time']}{recurring}\n"
+                f"   → {m['message'][:60]!r}"
+            )
+        await update.message.reply_text("\n\n".join(lines))
+
+    async def cmd_schedule_cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not self._is_admin(update):
+            return
+        args = context.args or []
+        if not args:
+            await update.message.reply_text("Usage: /schedule_cancel <id>")
+            return
+        msg_id = args[0]
+        if self.storage.remove_scheduled(msg_id):
+            await update.message.reply_text(f"🗑️ Scheduled message {msg_id} cancel ho gayi.")
+        else:
+            await update.message.reply_text(f"❌ {msg_id} nahi mila.")
+
     async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not self._is_admin(update):
             return
@@ -342,10 +437,28 @@ class TelegramAdminBot:
     async def cmd_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not self._is_admin(update):
             return
-        text = " ".join(context.args or [])
+        args = context.args or []
+        # Days filter parse: /all 1d, /all 7d, /all 30d
+        days = 0  # 0 = sabko (default)
+        message_start = 0
+        if args and args[0].lower().endswith("d"):
+            try:
+                days = int(args[0][:-1])
+                if days < 1 or days > 100:
+                    await update.message.reply_text("❌ Days 1-100 ke beech mein daalein.")
+                    return
+                message_start = 1
+            except ValueError:
+                pass
+        text = " ".join(args[message_start:])
         if not text:
             await update.message.reply_text(
-                "Usage: /all <message>\nExample: /all Good morning! Aaj ki offer..."
+                "Usage: /all <message> ya /all <days>d <message>\n"
+                "Examples:\n"
+                "  /all Good Morning!\n"
+                "  /all 1d Aaj ke customers ko message\n"
+                "  /all 7d Is hafte wale customers ko message\n"
+                "  /all 30d Is mahine wale customers ko message"
             )
             return
         try:
@@ -359,18 +472,37 @@ class TelegramAdminBot:
         if n == 0:
             await update.message.reply_text("❌ Koi contact nahi mila.")
             return
-        self.pending_broadcast = text
+        # Days filter — sirf woh contacts jo is duration mein message kiya
+        if days > 0:
+            cutoff = utils.now_ts() - (days * 86400)
+            filtered = []
+            for c in contacts:
+                phone = utils.normalize_phone(c.get("number")) or utils.chat_id_to_phone(c.get("id"))
+                if not phone:
+                    continue
+                last_seen = self.storage.get_contact_last_seen(phone)
+                if last_seen and last_seen >= cutoff:
+                    filtered.append(c)
+            contacts = filtered
+            n = len(contacts)
+            if n == 0:
+                await update.message.reply_text(
+                    f"❌ Last {days}d mein koi contact nahi aaya tha."
+                )
+                return
+        self.pending_broadcast = (text, days)
+        filter_info = f" (last {days}d ke contacts)" if days > 0 else " (sab contacts)"
         keyboard = InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton(f"✅ Confirm ({n} contacts)", callback_data="bc:confirm"),
+                    InlineKeyboardButton(f"✅ Confirm ({n} contacts{filter_info})", callback_data="bc:confirm"),
                     InlineKeyboardButton("❌ Cancel", callback_data="bc:cancel"),
                 ]
             ]
         )
         await update.message.reply_text(
             f"⚠️ Broadcast confirm karein:\n\n{text}\n\n"
-            f"{n} contacts ko yeh message jayega (rate limit ke saath, thoda time lagega).",
+            f"{n} contacts ko yeh message jayega{filter_info} (rate limit ke saath).",
             reply_markup=keyboard,
         )
 
@@ -380,27 +512,37 @@ class TelegramAdminBot:
         if not self._is_admin(update):
             return
         if query.data == "bc:confirm" and self.pending_broadcast:
-            text = self.pending_broadcast
+            text, days = self.pending_broadcast
             self.pending_broadcast = None
             await query.edit_message_text("🚀 Broadcast shuru ho raha hai...")
-            result = await self._run_broadcast(text)
+            result = await self._run_broadcast(text, days)
             await query.edit_message_text(result)
         elif query.data == "bc:cancel":
             self.pending_broadcast = None
             await query.edit_message_text("❌ Broadcast cancel ho gaya.")
 
-    async def _run_broadcast(self, text: str) -> str:
+    async def _run_broadcast(self, text: str, days: int = 0) -> str:
         try:
             contacts = self.openwa.get_contacts(self.session_id)
         except Exception as e:
             return f"❌ Contacts fetch failed: {e}"
+        # Days filter
+        if days > 0:
+            cutoff = utils.now_ts() - (days * 86400)
+            filtered = []
+            for c in contacts:
+                phone = utils.normalize_phone(c.get("number")) or utils.chat_id_to_phone(c.get("id"))
+                if not phone:
+                    continue
+                last_seen = self.storage.get_last_fired("seen", phone)
+                if last_seen and last_seen >= cutoff:
+                    filtered.append(c)
+            contacts = filtered
         sent = failed = skipped = 0
         own = self.storage.get_own_phone()
-        delay = self.config.get("broadcast_delay_seconds", 1.5)
+        delay = self.config.get("broadcast_delay_seconds", 1.0)
         for i, c in enumerate(contacts):
-            phone = utils.normalize_phone(c.get("number")) or utils.chat_id_to_phone(
-                c.get("id")
-            )
+            phone = utils.normalize_phone(c.get("number")) or utils.chat_id_to_phone(c.get("id"))
             if not phone or self.storage.is_blacklisted(phone) or (own and phone == own):
                 skipped += 1
                 continue
@@ -420,8 +562,9 @@ class TelegramAdminBot:
                     )
                 except Exception:
                     pass
+        filter_info = f" (last {days}d)" if days > 0 else ""
         return (
-            f"✅ Broadcast complete!\n\n"
+            f"✅ Broadcast complete!{filter_info}\n\n"
             f"Sent: {sent}\nFailed: {failed}\nSkipped (blacklist/own): {skipped}"
         )
 
@@ -587,6 +730,48 @@ class TelegramAdminBot:
         await update.message.reply_text(f"🔁 Automation {auto_id} mode: {mode}")
 
     # ---------------- blacklist ----------------
+    async def cmd_restart(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not self._is_admin(update):
+            return
+        await update.message.reply_text("🔄 Bot restart ho raha hai... (5 second)")
+        # Restart flag set karo — main loop detect karega
+        self._restart_requested = True
+        asyncio.get_event_loop().call_later(3, self._do_restart)
+
+    def _do_restart(self) -> None:
+        """Process ko naye instance se replace karo."""
+        import sys
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+    async def cmd_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not self._is_admin(update):
+            return
+        status_msg = await update.message.reply_text("🔄 Update check ho raha hai...")
+        try:
+            result = subprocess.run(
+                ["git", "pull"],
+                cwd=utils.PROJECT_ROOT,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode != 0:
+                await status_msg.edit_text(f"❌ Update failed:\n{result.stderr[:300]}")
+                return
+            output = result.stdout.strip()
+            if "Already up to date" in output:
+                await status_msg.edit_text("✅ Already up to date! Koi naya update nahi.")
+                return
+            # Update ho gaya — restart
+            await status_msg.edit_text(
+                f"✅ Update complete!\n\n{output[:300]}\n\n🔄 Restart ho raha hai..."
+            )
+            await asyncio.sleep(2)
+            self._restart_requested = True
+            asyncio.get_event_loop().call_later(3, self._do_restart)
+        except Exception as e:
+            await status_msg.edit_text(f"❌ Update error: {e}")
+
     async def cmd_blacklist_add(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not self._is_admin(update):
             return
@@ -643,7 +828,13 @@ class TelegramAdminBot:
             "  /status — poori status\n\n"
             "Messaging:\n"
             "  /all <message> — sabko broadcast (confirmation ke saath)\n"
+            "  /all <days>d <message> — sirf recent contacts ko (1d, 7d, 30d)\n"
             "  /send <number> <message> — specific number pe bhejein\n\n"
+            "Scheduled Messages:\n"
+            "  /schedule <number> <HH:MM> <message> — time pe message\n"
+            "  /schedule <number> daily <HH:MM> <message> — daily recurring\n"
+            "  /schedule_list — scheduled messages dekhein\n"
+            "  /schedule_cancel <id> — cancel karein\n\n"
             "Automations (WhatsApp pe message aaye to auto-reply):\n"
             "  /automation_add <trigger> => <reply>\n"
             "  /automation_list — saari rules\n"
@@ -655,6 +846,9 @@ class TelegramAdminBot:
             "  /blacklist_add <number>\n"
             "  /blacklist_remove <number>\n"
             "  /blacklist_list\n\n"
+            "System:\n"
+            "  /restart — bot restart karein\n"
+            "  /update — GitHub se latest update karein\n\n"
             "Match types (trigger ke pehle lagayein):\n"
             "  exact:  — poora message exactly match\n"
             "  starts: — message trigger se shuru ho\n"
@@ -686,6 +880,9 @@ class TelegramAdminBot:
         app.add_handler(CommandHandler("status", self.cmd_status))
         app.add_handler(CommandHandler("all", self.cmd_all))
         app.add_handler(CommandHandler("send", self.cmd_send))
+        app.add_handler(CommandHandler("schedule", self.cmd_schedule))
+        app.add_handler(CommandHandler("schedule_list", self.cmd_schedule_list))
+        app.add_handler(CommandHandler("schedule_cancel", self.cmd_schedule_cancel))
         app.add_handler(CommandHandler("automation_add", self.cmd_automation_add))
         app.add_handler(CommandHandler("automation_list", self.cmd_automation_list))
         app.add_handler(CommandHandler("automation_edit", self.cmd_automation_edit))
@@ -695,6 +892,8 @@ class TelegramAdminBot:
         app.add_handler(CommandHandler("blacklist_add", self.cmd_blacklist_add))
         app.add_handler(CommandHandler("blacklist_remove", self.cmd_blacklist_remove))
         app.add_handler(CommandHandler("blacklist_list", self.cmd_blacklist_list))
+        app.add_handler(CommandHandler("restart", self.cmd_restart))
+        app.add_handler(CommandHandler("update", self.cmd_update))
         app.add_handler(CommandHandler("help", self.cmd_help))
         app.add_handler(CallbackQueryHandler(self.on_callback))
 

@@ -128,6 +128,11 @@ class Storage:
         with self._lock:
             return phone in self._state.get("contact_seen", {})
 
+    def get_contact_last_seen(self, phone: str) -> float:
+        """Contact ka last message timestamp (0 agar kabhi nahi aaya)."""
+        with self._lock:
+            return self._state.get("contact_seen", {}).get(phone, 0)
+
     def mark_contact_seen(self, phone: str) -> None:
         with self._lock:
             self._state.setdefault("contact_seen", {})[phone] = time.time()
@@ -171,3 +176,34 @@ class Storage:
             self._state["send_timestamps"] = stamps
             self._write("state.json", self._state)
             return True
+
+    # ---------- scheduled messages ----------
+    def list_scheduled(self) -> list:
+        with self._lock:
+            return list(self._read("scheduled_messages.json", {"messages": []})["messages"])
+
+    def add_scheduled(self, msg: dict) -> None:
+        with self._lock:
+            data = self._read("scheduled_messages.json", {"messages": []})
+            data["messages"].append(msg)
+            self._write("scheduled_messages.json", data)
+
+    def remove_scheduled(self, msg_id: str) -> bool:
+        with self._lock:
+            data = self._read("scheduled_messages.json", {"messages": []})
+            before = len(data["messages"])
+            data["messages"] = [m for m in data["messages"] if m["id"] != msg_id]
+            if len(data["messages"]) < before:
+                self._write("scheduled_messages.json", data)
+                return True
+            return False
+
+    def next_scheduled_id(self) -> str:
+        with self._lock:
+            data = self._read("scheduled_messages.json", {"messages": []})
+            nums = [
+                int(m["id"][1:])
+                for m in data["messages"]
+                if m["id"].startswith("s") and m["id"][1:].isdigit()
+            ]
+            return f"s{max(nums) + 1 if nums else 1}"
