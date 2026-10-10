@@ -214,6 +214,8 @@ class Storage:
             data = self._read("scheduled_messages.json", {"messages": []})
             for m in data["messages"]:
                 if m["id"] == msg_id:
+                    if m.get("status") == "sent":
+                        return False  # already sent
                     m["status"] = "sent"
                     m["sent_at"] = time.time()
                     self._write("scheduled_messages.json", data)

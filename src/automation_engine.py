@@ -33,6 +33,15 @@ class AutomationEngine:
     def match_trigger(trigger: str, body: str, match_type: str = "contains") -> bool:
         if not trigger or not body:
             return False
+        if match_type == "regex":
+            # ReDoS protection — pattern length limit
+            if len(trigger) > 200:
+                return False
+            # Dangerous pattern check (nested quantifiers)
+            dangerous = ["(.+)+", "(.*)*", "(a+)+", "(a*)*", "(a|a)*", "(a|ab)*", "(.*a){100}"]
+            for d in dangerous:
+                if d in trigger:
+                    return False
         t = trigger.lower()
         b = body.lower()
         if match_type == "exact":

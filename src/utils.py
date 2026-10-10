@@ -17,16 +17,30 @@ logger = logging.getLogger("wta")
 
 
 def setup_logging(verbose: bool = False) -> logging.Logger:
-    """Console logging for the whole app."""
+    """Console logging for the whole app — PII masked."""
     level = logging.DEBUG if verbose else logging.INFO
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(
         logging.Formatter("%(asctime)s %(levelname)-7s %(message)s", "%H:%M:%S")
     )
+    # PII mask — phone numbers ko last 4 digits tak dikhao
+    class PIIFilter(logging.Filter):
+        def filter(self, record):
+            import re
+            msg = record.getMessage()
+            def mask_phone(m):
+                phone = m.group(0)
+                if len(phone) >= 8:
+                    return "***" + phone[-4:]
+                return phone
+            record.msg = re.sub(r"\b\d{8,15}\b", mask_phone, msg)
+            record.args = None  # args clear — formatting conflict avoid
+            return True
     root = logging.getLogger("wta")
     root.setLevel(level)
     if not root.handlers:
         root.addHandler(handler)
+        root.addFilter(PIIFilter())
     return root
 
 

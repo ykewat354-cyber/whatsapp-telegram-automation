@@ -141,6 +141,15 @@ cd "$INSTALL_DIR"
 mkdir -p data
 # Env template se .env banao (port + engine + chromium path)
 sed "s/__PORT__/2785/; s/__ENGINE__/whatsapp-web.js/; s|__CHROMIUM_PATH__|$(command -v chromium-browser 2>/dev/null || command -v chromium 2>/dev/null || echo '')|" openwa.env.template > openwa/.env
+# Network security — OpenWA ko sirf localhost pe bind karo
+# (LAN pe koi aur access na sake)
+if command -v iptables >/dev/null 2>&1; then
+  sudo iptables -A INPUT -p tcp --dport 2785 -s 127.0.0.1 -j ACCEPT 2>/dev/null || true
+  sudo iptables -A INPUT -p tcp --dport 2785 -j DROP 2>/dev/null || true
+  log "OpenWA port 2785 sirf localhost pe bind hai (iptables)"
+else
+  warn "iptables nahi mila — OpenWA port ko firewall se protect karein"
+fi
 cd "$INSTALL_DIR/openwa"
 PORT=2785 node dist/main > "$INSTALL_DIR/data/openwa-firstboot.log" 2>&1 &
 OPENWA_PID=$!

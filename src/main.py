@@ -151,8 +151,20 @@ def main() -> None:
     lock_file = os.path.join(utils.DATA_DIR, "app.lock")
     if os.path.exists(lock_file):
         try:
-            old_pid = int(open(lock_file).read().strip())
+            with open(lock_file) as f:
+                old_data = f.read().strip().split(":")
+                old_pid = int(old_data[0])
+                old_start = float(old_data[1]) if len(old_data) > 1 else 0
             os.kill(old_pid, 0)  # process check
+            # PID reuse protection — process start time match karein
+            try:
+                with open(f"/proc/{old_pid}/stat") as f:
+                    proc_start = int(f.read().split()[21])
+                if old_start > 0 and abs(proc_start - old_start) > 5:
+                    # PID reuse hua — naya process hai, purana lock stale
+                    raise ProcessLookupError
+            except (FileNotFoundError, IndexError, ValueError):
+                pass
             logger.error(
                 "Ek instance pehle se chal raha hai (pid %s).\n"
                 "Pehle use band karein: kill %s\n"
@@ -162,8 +174,14 @@ def main() -> None:
             sys.exit(1)
         except (ProcessLookupError, ValueError):
             pass  # purana lock stale hai
+    # Process start time store karo (PID reuse detection ke liye)
+    try:
+        with open(f"/proc/{os.getpid()}/stat") as f:
+            proc_start = int(f.read().split()[21])
+    except (FileNotFoundError, IndexError, ValueError):
+        proc_start = 0
     with open(lock_file, "w") as f:
-        f.write(str(os.getpid()))
+        f.write(f"{os.getpid()}:{proc_start}")
 
     config = load_config()
     if args.setup or not is_configured(config):

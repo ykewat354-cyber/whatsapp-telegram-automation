@@ -118,6 +118,9 @@ class OpenWAClient:
         return data.get("messages", [])
 
     def send_text(self, session_id: str, chat_id: str, text: str) -> str:
+        # Message length validate (OpenWA max 4096)
+        if len(text) > 4096:
+            raise OpenWAError(f"Message lamba hai ({len(text)} chars). Max 4096 allowed.")
         data = self._request(
             "POST",
             f"/sessions/{session_id}/messages/send-text",

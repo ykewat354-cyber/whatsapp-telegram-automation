@@ -788,29 +788,59 @@ class TelegramAdminBot:
             return
         status_msg = await update.message.reply_text("🔄 Update check ho raha hai...")
         try:
+            # Pehle fetch — kya change hai dekho
+            subprocess.run(["git", "fetch"], cwd=utils.PROJECT_ROOT, capture_output=True, timeout=30)
             result = subprocess.run(
-                ["git", "pull"],
+                ["git", "log", "HEAD..origin/main", "--oneline"],
                 cwd=utils.PROJECT_ROOT,
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=10,
             )
-            if result.returncode != 0:
-                await status_msg.edit_text(f"❌ Update failed:\n{result.stderr[:300]}")
-                return
-            output = result.stdout.strip()
-            if "Already up to date" in output:
+            if not result.stdout.strip():
                 await status_msg.edit_text("✅ Already up to date! Koi naya update nahi.")
                 return
-            # Update ho gaya — restart
-            await status_msg.edit_text(
-                f"✅ Update complete!\n\n{output[:300]}\n\n🔄 Restart ho raha hai..."
+            # Changes dikhao — admin confirm kare
+            changes = result.stdout.strip()
+            count = len(changes.split("\n"))
+            keyboard = InlineKeyboardMarkup(
+                [[
+                    InlineKeyboardButton("✅ Update karein", callback_data="update:yes"),
+                    InlineKeyboardButton("❌ Cancel", callback_data="update:no"),
+                ]]
             )
-            await asyncio.sleep(2)
-            self._restart_requested = True
-            asyncio.get_running_loop().call_later(3, self._do_restart)
+            await status_msg.edit_text(
+                f"📦 {count} naye commit(s) available:\n\n{changes[:500]}\n\n"
+                "Update karne ke liye confirm karein.",
+                reply_markup=keyboard,
+            )
         except Exception as e:
             await status_msg.edit_text(f"❌ Update error: {e}")
+
+    async def on_update_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Update confirmation handler."""
+        query = update.callback_query
+        await query.answer()
+        if not self._is_admin(update):
+            return
+        if query.data == "update:yes":
+            await query.edit_message_text("🔄 Update ho raha hai...")
+            try:
+                subprocess.run(
+                    ["git", "pull"],
+                    cwd=utils.PROJECT_ROOT,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                await query.edit_message_text("✅ Update complete! 🔄 Restart ho raha hai...")
+                await asyncio.sleep(2)
+                self._restart_requested = True
+                asyncio.get_running_loop().call_later(3, self._do_restart)
+            except Exception as e:
+                await query.edit_message_text(f"❌ Update failed: {e}")
+        elif query.data == "update:no":
+            await query.edit_message_text("❌ Update cancel ho gaya.")
 
     async def cmd_blacklist_add(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not self._is_admin(update):
@@ -938,6 +968,7 @@ class TelegramAdminBot:
         app.add_handler(CommandHandler("blacklist_list", self.cmd_blacklist_list))
         app.add_handler(CommandHandler("restart", self.cmd_restart))
         app.add_handler(CommandHandler("update", self.cmd_update))
+        app.add_handler(CallbackQueryHandler(self.on_update_callback, pattern="^update:"))
         app.add_handler(CommandHandler("help", self.cmd_help))
         app.add_handler(CallbackQueryHandler(self.on_callback))
 
