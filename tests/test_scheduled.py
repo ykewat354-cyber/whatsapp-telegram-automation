@@ -76,6 +76,20 @@ class ScheduledMessageTestCase(unittest.TestCase):
         self.assertGreater(self.storage.get_contact_last_seen("919876543210"), cutoff_1d)
         self.assertEqual(self.storage.get_contact_last_seen("911111111111"), 0)
 
+    def test_time_filter_logic(self):
+        """Minutes/hours/days filter ka logic test karo."""
+        self.storage.mark_contact_seen("919876543210")
+        now = utils.now_ts()
+        # 30m filter — 30 min pehle aaya tha, to match hona chahiye
+        cutoff_30m = now - (30 * 60)
+        self.assertGreater(self.storage.get_contact_last_seen("919876543210"), cutoff_30m)
+        # 2h filter
+        cutoff_2h = now - (2 * 3600)
+        self.assertGreater(self.storage.get_contact_last_seen("919876543210"), cutoff_2h)
+        # 1d filter
+        cutoff_1d = now - (1 * 86400)
+        self.assertGreater(self.storage.get_contact_last_seen("919876543210"), cutoff_1d)
+
 
 class ScheduleTimeParsingTestCase(unittest.TestCase):
     def test_parse_daily_time(self):

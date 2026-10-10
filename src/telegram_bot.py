@@ -438,27 +438,43 @@ class TelegramAdminBot:
         if not self._is_admin(update):
             return
         args = context.args or []
-        # Days filter parse: /all 1d, /all 7d, /all 30d
-        days = 0  # 0 = sabko (default)
+        # Time filter parse: /all 30m, /all 2h, /all 1d, /all 7d
+        seconds = 0  # 0 = sabko (default)
         message_start = 0
-        if args and args[0].lower().endswith("d"):
+        if args and args[0][-1].lower() in ("m", "h", "d"):
             try:
-                days = int(args[0][:-1])
-                if days < 1 or days > 100:
-                    await update.message.reply_text("❌ Days 1-100 ke beech mein daalein.")
-                    return
+                value = int(args[0][:-1])
+                unit = args[0][-1].lower()
+                if unit == "m":
+                    seconds = value * 60
+                    if value < 1 or value > 1440:  # max 24h in minutes
+                        raise ValueError
+                elif unit == "h":
+                    seconds = value * 3600
+                    if value < 1 or value > 2400:  # max 100 days in hours
+                        raise ValueError
+                elif unit == "d":
+                    seconds = value * 86400
+                    if value < 1 or value > 100:
+                        raise ValueError
                 message_start = 1
             except ValueError:
                 pass
         text = " ".join(args[message_start:])
         if not text:
             await update.message.reply_text(
-                "Usage: /all <message> ya /all <days>d <message>\n"
+                "Usage: /all <message> ya /all <time> <message>\n"
+                "Time filters:\n"
+                "  /all 30m  → last 30 minutes ke contacts\n"
+                "  /all 2h   → last 2 hours ke contacts\n"
+                "  /all 1d   → last 1 day ke contacts\n"
+                "  /all 7d   → last 7 days ke contacts\n"
+                "  /all 30d  → last 30 days ke contacts\n\n"
                 "Examples:\n"
                 "  /all Good Morning!\n"
-                "  /all 1d Aaj ke customers ko message\n"
-                "  /all 7d Is hafte wale customers ko message\n"
-                "  /all 30d Is mahine wale customers ko message"
+                "  /all 30m Aaj ke active customers\n"
+                "  /all 2h Is 2 ghante ke contacts\n"
+                "  /all 7d Is hafte wale customers"
             )
             return
         try:
@@ -472,9 +488,9 @@ class TelegramAdminBot:
         if n == 0:
             await update.message.reply_text("❌ Koi contact nahi mila.")
             return
-        # Days filter — sirf woh contacts jo is duration mein message kiya
-        if days > 0:
-            cutoff = utils.now_ts() - (days * 86400)
+        # Time filter — sirf woh contacts jo is duration mein message kiya
+        if seconds > 0:
+            cutoff = utils.now_ts() - seconds
             filtered = []
             for c in contacts:
                 phone = utils.normalize_phone(c.get("number")) or utils.chat_id_to_phone(c.get("id"))
@@ -487,11 +503,11 @@ class TelegramAdminBot:
             n = len(contacts)
             if n == 0:
                 await update.message.reply_text(
-                    f"❌ Last {days}d mein koi contact nahi aaya tha."
+                    f"❌ Last {args[0]} mein koi contact nahi aaya tha."
                 )
                 return
-        self.pending_broadcast = (text, days)
-        filter_info = f" (last {days}d ke contacts)" if days > 0 else " (sab contacts)"
+        self.pending_broadcast = (text, seconds)
+        filter_info = f" (last {args[0]} ke contacts)" if seconds > 0 else " (sab contacts)"
         keyboard = InlineKeyboardMarkup(
             [
                 [
@@ -512,29 +528,29 @@ class TelegramAdminBot:
         if not self._is_admin(update):
             return
         if query.data == "bc:confirm" and self.pending_broadcast:
-            text, days = self.pending_broadcast
+            text, seconds_filter = self.pending_broadcast
             self.pending_broadcast = None
             await query.edit_message_text("🚀 Broadcast shuru ho raha hai...")
-            result = await self._run_broadcast(text, days)
+            result = await self._run_broadcast(text, seconds_filter)
             await query.edit_message_text(result)
         elif query.data == "bc:cancel":
             self.pending_broadcast = None
             await query.edit_message_text("❌ Broadcast cancel ho gaya.")
 
-    async def _run_broadcast(self, text: str, days: int = 0) -> str:
+    async def _run_broadcast(self, text: str, seconds_filter: int = 0) -> str:
         try:
             contacts = self.openwa.get_contacts(self.session_id)
         except Exception as e:
             return f"❌ Contacts fetch failed: {e}"
-        # Days filter
-        if days > 0:
-            cutoff = utils.now_ts() - (days * 86400)
+        # Time filter (seconds)
+        if seconds_filter > 0:
+            cutoff = utils.now_ts() - seconds_filter
             filtered = []
             for c in contacts:
                 phone = utils.normalize_phone(c.get("number")) or utils.chat_id_to_phone(c.get("id"))
                 if not phone:
                     continue
-                last_seen = self.storage.get_last_fired("seen", phone)
+                last_seen = self.storage.get_contact_last_seen(phone)
                 if last_seen and last_seen >= cutoff:
                     filtered.append(c)
             contacts = filtered
@@ -828,7 +844,11 @@ class TelegramAdminBot:
             "  /status — poori status\n\n"
             "Messaging:\n"
             "  /all <message> — sabko broadcast (confirmation ke saath)\n"
-            "  /all <days>d <message> — sirf recent contacts ko (1d, 7d, 30d)\n"
+            "  /all 30m <message> — last 30 minutes ke contacts\n"
+            "  /all 2h <message> — last 2 hours ke contacts\n"
+            "  /all 1d <message> — last 1 day ke contacts\n"
+            "  /all 7d <message> — last 7 days ke contacts\n"
+            "  /all 30d <message> — last 30 days ke contacts\n"
             "  /send <number> <message> — specific number pe bhejein\n\n"
             "Scheduled Messages:\n"
             "  /schedule <number> <HH:MM> <message> — time pe message\n"
