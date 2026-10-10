@@ -117,8 +117,13 @@ def write_openwa_env(cfg: dict) -> None:
         "__ENGINE__", cfg.get("openwa_engine", "whatsapp-web.js")
     )
     # Chromium path — Termux pe installed Chromium use karo
+    # Desktop/Codespaces pe puppeteer ka Chrome use hoga (path empty = default)
     chromium_path = detect_chromium_path() or ""
-    content = content.replace("__CHROMIUM_PATH__", chromium_path)
+    if chromium_path:
+        content = content.replace("__CHROMIUM_PATH__", chromium_path)
+    else:
+        # Path empty — puppeteer default Chrome use karega
+        content = content.replace("PUPPETEER_EXECUTABLE_PATH=__CHROMIUM_PATH__", "# PUPPETEER_EXECUTABLE_PATH=puppeteer-default")
     env_path = os.path.join(utils.OPENWA_DIR, ".env")
     if os.path.exists(env_path):
         with open(env_path, encoding="utf-8") as f:

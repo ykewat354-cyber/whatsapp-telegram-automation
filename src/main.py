@@ -148,6 +148,7 @@ def main() -> None:
     # ---- single-instance guard ----
     # Purana instance background mein chal raha ho to naya start nahi hoga
     # (Telegram pe "Conflict: terminated by other getUpdates request" error aata hai)
+    os.makedirs(utils.DATA_DIR, exist_ok=True)  # data dir ensure karo
     lock_file = os.path.join(utils.DATA_DIR, "app.lock")
     if os.path.exists(lock_file):
         try:

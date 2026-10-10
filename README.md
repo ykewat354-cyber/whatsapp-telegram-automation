@@ -232,6 +232,28 @@ docker compose up -d
 # API key: docker exec openwa-api cat /data/.api-key
 ```
 
+### GitHub Codespaces / Cloud pe
+
+Codespaces aur cloud Linux environments pe bhi yeh system kaam karta hai:
+
+```bash
+# 1. Codespaces mein pehle dependencies install karein
+sudo apt-get update
+sudo apt-get install -y python3 python3-pip nodejs npm git
+
+# 2. Installer chalayein (Chromium auto-detect hoga ya puppeteer Chrome use karega)
+curl -sSL https://raw.githubusercontent.com/ykewat354-cyber/whatsapp-telegram-automation/main/install.sh | bash
+```
+
+> **Codespaces note:** Agar QR nahi aa raha to:
+> 1. `data/openwa.log` check karein — Chrome/Chromium error to nahi
+> 2. `/status` se session `ready` hai ya nahi dekhein
+> 3. `/connect` dobara chalayein — naya QR milega
+> 4. Agar `node dist/main` fail ho to `openwa.log` mein exact error dekhein
+
+> **Test files:** `tests/` folder GitHub pe push hota hai — yeh vulnerability nahi hai,
+> balki best practice hai (CI/CD ke liye). Inse production code affect nahi hota.
+
 ---
 
 ## ⚠️ Disclaimer

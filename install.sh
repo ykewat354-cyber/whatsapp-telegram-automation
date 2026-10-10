@@ -140,7 +140,13 @@ log "Step 5/6: OpenWA first boot — API key generate ho raha hai..."
 cd "$INSTALL_DIR"
 mkdir -p data
 # Env template se .env banao (port + engine + chromium path)
-sed "s/__PORT__/2785/; s/__ENGINE__/whatsapp-web.js/; s|__CHROMIUM_PATH__|$(command -v chromium-browser 2>/dev/null || command -v chromium 2>/dev/null || echo '')|" openwa.env.template > openwa/.env
+CHROMIUM=$(command -v chromium-browser 2>/dev/null || command -v chromium 2>/dev/null || echo '')
+if [ -n "$CHROMIUM" ]; then
+  sed "s/__PORT__/2785/; s/__ENGINE__/whatsapp-web.js/; s|__CHROMIUM_PATH__|$CHROMIUM|" openwa.env.template > openwa/.env
+else
+  # Desktop/Codespaces — puppeteer default Chrome use hoga
+  sed "s/__PORT__/2785/; s/__ENGINE__/whatsapp-web.js/; s|PUPPETEER_EXECUTABLE_PATH=__CHROMIUM_PATH__|# PUPPETEER_EXECUTABLE_PATH=puppeteer-default|" openwa.env.template > openwa/.env
+fi
 # Network security — OpenWA ko sirf localhost pe bind karo
 # (LAN pe koi aur access na sake)
 if command -v iptables >/dev/null 2>&1; then

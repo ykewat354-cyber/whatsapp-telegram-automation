@@ -121,6 +121,13 @@ class SecurityTestCase(unittest.TestCase):
         self.assertEqual(data[0], "12345")
         self.assertEqual(data[1], "67890")
 
+    def test_data_dir_created(self):
+        """Data directory auto-create hona chahiye."""
+        new_dir = os.path.join(self.tmp, "new_data")
+        self.assertFalse(os.path.exists(new_dir))
+        storage = Storage(data_dir=new_dir)
+        self.assertTrue(os.path.exists(new_dir))
+
     # ---------- Scheduled sent marking ----------
     def test_mark_scheduled_sent(self):
         """One-time message 'sent' mark hona chahiye."""
